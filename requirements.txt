@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+sqlalchemy[asyncio]
+asyncmy
+pytest
+pytest-asyncio
+httpx
+cryptography

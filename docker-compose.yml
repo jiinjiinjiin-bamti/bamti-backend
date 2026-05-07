@@ -1,0 +1,55 @@
+services:
+  api:
+    build:
+      context: .
+    environment:
+      APP_NAME: ${APP_NAME:-DMS Backend}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      INFERENCE_RUNNER: ${INFERENCE_RUNNER:-mock}
+      FRAME_QUEUE_SIZE: ${FRAME_QUEUE_SIZE:-4}
+      WEBSOCKET_IDLE_TIMEOUT_SECONDS: ${WEBSOCKET_IDLE_TIMEOUT_SECONDS:-30}
+      WEBSOCKET_DRAIN_TIMEOUT_SECONDS: ${WEBSOCKET_DRAIN_TIMEOUT_SECONDS:-5}
+      MAX_FRAME_BYTES: ${MAX_FRAME_BYTES:-1048576}
+      DATABASE_URL: ${DATABASE_URL:-mysql+asyncmy://dms_user:dms_password@mysql:3306/dms}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-dms}
+      MYSQL_USER: ${MYSQL_USER:-dms_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-dms_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-dms_root_password}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./frontend-dist:/usr/share/nginx/html:ro
+
+volumes:
+  mysql-data:

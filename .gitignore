@@ -1,13 +1,68 @@
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual env
 .venv/
 venv/
+env/
+
+# Environment variables
 .env
 .env.*
 !.env.example
+
+# Build artifacts
 dist/
 build/
 *.egg-info/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker / local runtime
+mysql-data/
+db-data/
+data/
+volumes/
+
+# Certificates / HTTPS
+certbot/
+letsencrypt/
+nginx/certs/
+*.pem
+*.key
+*.crt
+*.csr
+
+# AI model weights
+*.pth
+*.pt
+*.onnx
+*.engine
+*.tflite
+
+weights/
+checkpoints/
+models/weights/
+
+
+# Optional caches
+.cache/
+tmp/
+temp/

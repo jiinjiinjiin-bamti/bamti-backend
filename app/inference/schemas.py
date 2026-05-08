@@ -1,7 +1,33 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class DetectionClass(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    variable_name: str = Field(alias="variableName")
+    class_id: str = Field(alias="classId")
+    display_name: str = Field(alias="displayName")
+    description: str
+    threshold: float = Field(ge=0.0, le=1.0)
+
+
+class DetectionScore(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    variable_name: str = Field(alias="variableName")
+    class_id: str = Field(alias="classId")
+    display_name: str = Field(alias="displayName")
+    score: float = Field(ge=0.0, le=1.0)
+
+
+class ModelManifest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_version: str = Field(alias="modelVersion")
+    classes: tuple[DetectionClass, ...]
 
 
 class InferenceResult(BaseModel):

@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     websocket_idle_timeout_seconds: float = 30.0
     websocket_drain_timeout_seconds: float = 5.0
     max_frame_bytes: int = 1_048_576
+    cors_allowed_origins: tuple[str, ...] = (
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+    )
     database_url: str = (
         "mysql+asyncmy://dms_user:dms_password@localhost:3306/dms"
     )

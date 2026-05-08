@@ -1,159 +1,97 @@
 # Decisions
 
-This document records architecture and implementation decisions that are visible
-in the current codebase.
+This document records architecture and implementation decisions visible in the
+current backend.
 
-## Keep Runtime Modules Separate
+## Use Versioned HTTP APIs First
 
 Decision:
 
-- Keep WebSocket handling, inference, alerting, and storage in separate modules.
-
-Current implementation:
-
-- `app/ws`
-- `app/inference`
-- `app/alerts`
-- `app/storage`
+- Implement the frontend integration through `/api/v1`.
+- Keep health outside versioning as `/api/health`.
+- Defer WebSocket inference until the HTTP path is stable.
 
 Reason:
 
-- The project needs to swap inference implementations later without entangling
-  WebSocket transport, alert rules, or persistence.
+- The current frontend already sends frames through HTTP.
+- The team needs stable integration and one-minute performance measurements
+  before optimizing transport.
 
-## Use a Runner Interface
+## Remove Runtime Mock Inference
 
 Decision:
 
-- Model execution goes through `InferenceRunner`.
+- Do not ship a runtime mock runner in the backend.
+- The default runner is the real PyTorch runner, selected with
+  `INFERENCE_RUNNER=bamti-torch`.
+
+Reason:
+
+- The frontend should now connect to the real model response shape.
+- Tests can still use test-local fake runners through monkeypatching without
+  keeping a mock implementation in application code.
+
+## Keep Model Execution Behind a Runner Interface
+
+Decision:
+
+- Model execution still goes through `InferenceRunner`.
 
 Current implementation:
 
 - `app/inference/runner.py` defines the interface.
-- `app/inference/mock_runner.py` implements `MockRunner`.
-- `app/inference/manifest.py` exposes `get_runner()`.
-
-Current limit:
-
-- Only `mock` is supported.
-- There is no manifest file parser yet.
-
-## Start With MockRunner
-
-Decision:
-
-- Build the end-to-end backend flow first with `MockRunner`.
-
-Current implementation:
-
-- `MockRunner.infer()` ignores the input frame and returns an attentive result.
+- `app/inference/torch_runner.py` implements `BamtiTorchRunner`.
+- `app/inference/manifest.py` selects the runner.
 
 Reason:
 
-- This lets WebSocket behavior, queueing, alerts, tests, and container setup exist
-  before real model integration.
+- ONNX or another backend can be added later without changing the v1 HTTP route
+  contract.
 
-## Keep Alert Logic Separate From Model Logic
-
-Decision:
-
-- Runners return inference results.
-- `AlertEngine` converts results into alerts.
-
-Current implementation:
-
-- `app/ws/inference.py` calls the runner and then calls `AlertEngine`.
-- `AlertEngine` does not call runner code.
-
-## Do Not Persist Frames or Per-Frame Results
+## Persist One-Minute Measurements as JSON Files
 
 Decision:
 
-- The database should not store raw frame bytes.
-- The database should not store per-frame inference results.
-
-Current implementation:
-
-- SQLAlchemy models only cover sessions, distraction events, and session summaries.
-- No table exists for frames or per-frame inference results.
-
-## Prefer Low Latency Over Processing Every Frame
-
-Decision:
-
-- Use a bounded queue per WebSocket session.
-- If the queue is full, drop an older pending frame and keep the newest one.
-
-Current implementation:
-
-- `WebSocketSessionManager.create_queue()` creates `asyncio.Queue(maxsize=N)`.
-- `WebSocketSessionManager.put_latest()` drops one queued frame when full.
+- Store one-minute measurement payloads as JSON files under `TELEMETRY_RUNS_DIR`.
+- Do not require database persistence for performance experiment logs.
 
 Reason:
 
-- For real-time driver monitoring, stale frames are less useful than recent frames.
+- The team wants to compare optimization attempts over time.
+- JSON files are easy to inspect, commit-exclude, and archive separately.
 
-## Validate Frames At The WebSocket Boundary
+## Do Not Store Raw Frames
 
 Decision:
 
-- Reject empty frames, oversized frames, and frames whose declared content type is
-  not `image/jpeg` before enqueueing.
-- Keep JPEG byte-level validation out of the MVP.
-
-Current implementation:
-
-- `FrameMeta.content_type` is validated from the client-provided metadata.
-- The binary frame is checked for non-empty bytes and `MAX_FRAME_BYTES`.
-- JPEG magic bytes are not validated yet.
+- Do not store raw frame bytes.
+- Do not store per-frame inference results in the database during v1 HTTP
+  integration.
 
 Reason:
 
-- The MVP needs predictable transport behavior without adding image decoding or
-  heavier content inspection to the WebSocket endpoint.
+- The current goal is real-time inference and performance measurement, not data
+  collection.
+- Avoiding raw-frame persistence reduces privacy and storage risk.
 
-## Use FastAPI and Pydantic
-
-Decision:
-
-- Use FastAPI for HTTP and WebSocket endpoints.
-- Use Pydantic models for request/result structures where present.
-
-Current implementation:
-
-- `HealthResponse`, `SessionStartMessage`, `SessionEndMessage`, `FrameMeta`,
-  `InferenceResult`, `QueuedFrame`, and `Alert` are Pydantic models.
-
-## Use Async SQLAlchemy With MySQL
+## Keep SQLAlchemy Storage Modules for Later
 
 Decision:
 
-- Use SQLAlchemy async engine with MySQL.
+- Keep `app/storage` in the repository even though v1 HTTP inference does not
+  use it yet.
 
-Current implementation:
+Reason:
 
-- `DATABASE_URL` defaults to an `asyncmy` MySQL URL.
-- `docker-compose.yml` runs `mysql:8.4`.
-- `app/storage/database.py` creates an async engine and session factory.
+- Session/event persistence is likely to return later, but it should be designed
+  after the model integration path is stable.
+- The Compose MySQL service is kept behind the `persistence` profile so the
+  active HTTP model API can start without waiting for an unused database.
 
-Current limit:
-
-- The WebSocket flow does not yet persist sessions, events, or summaries.
-- Migrations are not implemented.
-
-## Use Nginx as Reverse Proxy
+## Use Nginx as API Reverse Proxy
 
 Decision:
 
-- Expose one public domain and route by path.
-
-Current implementation:
-
-- `/` serves frontend static files from the Nginx container.
-- `/api/` proxies to FastAPI HTTP routes.
-- `/ws/` proxies to FastAPI WebSocket routes.
-
-Current limit:
-
-- The repository does not include frontend files.
-- HTTPS config is an example, not an automated certificate setup.
+- Nginx proxies `/api/` to FastAPI.
+- WebSocket proxying is removed from the active config until WebSocket inference
+  is intentionally reintroduced.

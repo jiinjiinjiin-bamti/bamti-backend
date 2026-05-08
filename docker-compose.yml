@@ -5,19 +5,23 @@ services:
     environment:
       APP_NAME: ${APP_NAME:-DMS Backend}
       ENVIRONMENT: ${ENVIRONMENT:-local}
-      INFERENCE_RUNNER: ${INFERENCE_RUNNER:-mock}
-      FRAME_QUEUE_SIZE: ${FRAME_QUEUE_SIZE:-4}
-      WEBSOCKET_IDLE_TIMEOUT_SECONDS: ${WEBSOCKET_IDLE_TIMEOUT_SECONDS:-30}
-      WEBSOCKET_DRAIN_TIMEOUT_SECONDS: ${WEBSOCKET_DRAIN_TIMEOUT_SECONDS:-5}
+      INFERENCE_RUNNER: ${INFERENCE_RUNNER:-bamti-torch}
+      MODEL_PATH: ${MODEL_PATH:-/models/final_model.pth}
+      MODEL_DEVICE: ${MODEL_DEVICE:-cpu}
+      MODEL_INPUT_SIZE: ${MODEL_INPUT_SIZE:-224}
+      MODEL_SCORE_ACTIVATION: ${MODEL_SCORE_ACTIVATION:-softmax}
+      TELEMETRY_RUNS_DIR: ${TELEMETRY_RUNS_DIR:-/app/telemetry_runs}
       MAX_FRAME_BYTES: ${MAX_FRAME_BYTES:-1048576}
-      DATABASE_URL: ${DATABASE_URL:-mysql+asyncmy://dms_user:dms_password@mysql:3306/dms}
-    depends_on:
-      mysql:
-        condition: service_healthy
+      DATABASE_URL: ${DATABASE_URL:-mysql+aiomysql://dms_user:dms_password@mysql:3306/dms}
     ports:
       - "8000:8000"
+    volumes:
+      - ../model:/models:ro
+      - telemetry-runs:/app/telemetry_runs
 
   mysql:
+    profiles:
+      - persistence
     image: mysql:8.4
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-dms}
@@ -29,8 +33,6 @@ services:
       - --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql
-    ports:
-      - "3306:3306"
     healthcheck:
       test:
         [
@@ -53,3 +55,4 @@ services:
 
 volumes:
   mysql-data:
+  telemetry-runs:

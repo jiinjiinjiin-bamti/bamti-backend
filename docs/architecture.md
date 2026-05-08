@@ -1,157 +1,125 @@
 # Architecture
 
-This document describes the current repository structure and implemented runtime
-shape of the DMS backend.
+This backend currently exposes a versioned HTTP API for frontend integration.
+WebSocket inference is intentionally deferred.
 
 ## Runtime Entry Point
 
 - `app/main.py` creates the FastAPI application.
 - HTTP routes are mounted under `/api`.
-- WebSocket routes are mounted under `/ws`.
+- `app/api/routes.py` includes `GET /api/health` and the versioned v1 router.
+- `app/api/v1/routes.py` mounts v1 inference and telemetry endpoints.
 
-Current route modules:
+## API Shape
 
-- `app/api/routes.py` includes HTTP route modules.
-- `app/api/health.py` implements `GET /api/health`.
-- `app/ws/inference.py` implements `GET /ws/inference`.
+```text
+GET  /api/health
+GET  /api/v1/detection-classes
+POST /api/v1/inference/frame
+POST /api/v1/telemetry/runs
+GET  /api/v1/telemetry/runs
+```
+
+`/api/health` is not versioned because it describes the API process itself.
+Model inference and performance telemetry are versioned under `/api/v1`.
 
 ## Module Boundaries
 
-The code is split into four main application areas:
-
-- `app/ws`
-  - Owns the WebSocket endpoint and per-session queue handling.
-  - `inference.py` handles the WebSocket message flow.
-  - `manager.py` manages bounded queues for active sessions.
+- `app/api`
+  - Owns HTTP routing and request/response schemas.
 - `app/inference`
-  - Owns inference schemas, runner interface, runner selection, and the mock runner.
-  - `runner.py` defines `InferenceRunner`.
-  - `mock_runner.py` implements `MockRunner`.
-  - `manifest.py` selects a runner by name.
-- `app/alerts`
-  - Owns alert evaluation.
-  - `engine.py` converts an `InferenceResult` into zero or more alerts.
+  - Owns model loading, preprocessing, runner selection, inference execution, and
+    per-frame telemetry.
 - `app/storage`
-  - Owns database setup, SQLAlchemy models, schema initialization, and repositories.
-  - No raw frames or per-frame inference results are modeled for persistence.
+  - Keeps SQLAlchemy database models and repository code for later persistence
+    work. The current v1 inference endpoint does not write frame results to the
+    database.
+- `app/core`
+  - Owns environment-driven settings.
 
-## WebSocket Inference Flow
+## Inference Flow
 
-The implemented endpoint is:
+`POST /api/v1/inference/frame` accepts one JPEG frame using
+`multipart/form-data`.
+
+Expected form fields:
+
+- `frame`: uploaded JPEG file.
+- `frameId`: optional client frame id.
+- `clientSentAt`: optional client timestamp string.
+
+Processing steps:
+
+1. Validate `Content-Type` is `image/jpeg`.
+2. Read up to `MAX_FRAME_BYTES`.
+3. Reject empty or oversized frames.
+4. Run the configured `InferenceRunner`.
+5. Decode JPEG bytes and resize to `MODEL_INPUT_SIZE`.
+6. Normalize with ImageNet mean/std.
+7. Run the ViT-B/16 model checkpoint.
+8. Convert logits with `softmax` or `sigmoid`.
+9. Return class scores and telemetry.
+
+Response fields include:
+
+- `frameId`
+- `clientSentAt`
+- `serverReceivedAt`
+- `serverRespondedAt`
+- `detections`
+- `model`
+- `telemetry`
+
+## Model Runner
+
+The active runner is `BamtiTorchRunner`.
+
+Runner selection:
 
 ```text
-GET /ws/inference
+INFERENCE_RUNNER=bamti-torch
 ```
 
-Implemented flow:
+The runner loads `MODEL_PATH`, expects a checkpoint with `model_state_dict` and
+`class_names`, and builds a `torchvision.models.vit_b_16` model with the number
+of checkpoint classes.
 
-1. Client sends `session_start` JSON.
-2. Server creates a `driving_session` row, creates a session queue, starts a background result worker, and sends `session_started`.
-3. Client may send `ping`; server replies with `pong`.
-4. Client sends `frame_meta` JSON with `content_type` set to `image/jpeg`.
-5. Client sends a binary JPEG frame.
-6. Server validates the frame, queues it, runs the configured runner, evaluates alerts, and sends `inference_result`.
-7. Client sends `session_end` JSON or disconnects.
+The current model classes are read from the checkpoint and surfaced through
+`GET /api/v1/detection-classes`.
 
-The WebSocket implementation uses one `asyncio.Queue` per session. Queue size is
-configured by `FRAME_QUEUE_SIZE` and defaults to `4`.
+## Telemetry Runs
 
-When a queue is full, `WebSocketSessionManager.put_latest()` removes one pending
-frame before enqueueing the newest frame. This favors low latency over processing
-every frame.
+`POST /api/v1/telemetry/runs` stores the frontend's one-minute performance
+measurement payload as a JSON file.
 
-The WebSocket endpoint also rejects empty frames, frames larger than
-`MAX_FRAME_BYTES`, and frame metadata whose `content_type` is not `image/jpeg`.
-If no frame or control message arrives before `WEBSOCKET_IDLE_TIMEOUT_SECONDS`,
-the server sends an `idle_timeout` error and closes the connection normally.
-On `session_end`, the endpoint waits up to `WEBSOCKET_DRAIN_TIMEOUT_SECONDS` for
-queued frames to finish, marks the `driving_session` ended, creates or updates
-`session_summary`, and then sends `session_ended`.
+Default path:
 
-If a client disconnects, idle timeout occurs, or queue drain timeout occurs while
-a session is open, the endpoint attempts to mark the `driving_session` ended and
-create or update `session_summary` during cleanup. The current database schema
-does not distinguish normal and abnormal close reasons; close reasons are logged.
-
-The WebSocket contract is documented in `docs/websocket-contract.md`.
-
-## Inference
-
-`InferenceRunner` is the current runner interface:
-
-```python
-async def infer(self, frame: bytes) -> InferenceResult
+```text
+backend/telemetry_runs/
 ```
 
-Current implemented runner:
-
-- `MockRunner`
-  - Ignores the frame bytes.
-  - Always returns an attentive result with high confidence.
-
-Runner selection is done by `get_runner()` in `app/inference/manifest.py`.
-Currently only the name `mock` is supported.
-
-## Alerts
-
-`AlertEngine.evaluate()` accepts an `InferenceResult` and returns a list of
-alerts.
-
-Current behavior:
-
-- If `is_distracted` is false, no alerts are returned.
-- If `is_distracted` is true, one `distraction_detected` warning alert is returned.
-
-The alert engine does not call model runners directly.
-
-## Storage
-
-Database settings are defined in `app/core/config.py`.
-
-The async SQLAlchemy engine and session factory live in `app/storage/database.py`.
-The schema can be created with:
-
-```bash
-python -m app.storage.init_db
-```
-
-Current SQLAlchemy models:
-
-- `DrivingSession`
-  - Table: `driving_session`
-  - Tracks session id, optional driver id, status, start/end timestamps, and audit timestamps.
-- `DistractionEvent`
-  - Table: `distraction_event`
-  - Tracks session-linked distraction events.
-- `SessionSummary`
-  - Table: `session_summary`
-  - Tracks one summary row per session.
-
-Current repositories:
-
-- `DrivingSessionRepository`
-- `DistractionEventRepository`
-- `SessionSummaryRepository`
-
-The WebSocket lifecycle writes `driving_session` and `session_summary` through a
-small helper in `app/ws/lifecycle.py`. Raw frames and per-frame inference results
-are not passed to persistence. `distraction_event` persistence is intentionally
-not wired yet.
+The directory is ignored by Git. The matching `GET /api/v1/telemetry/runs`
+endpoint lists saved JSON files.
 
 ## Deployment Shape
 
-The repository includes:
+Nginx serves frontend static files and proxies only API requests:
 
-- `Dockerfile` for the FastAPI API container.
-- `docker-compose.yml` with `api`, `mysql`, and `nginx` services.
-- `nginx/conf.d/dms.conf` for HTTP reverse proxy.
-- `nginx/conf.d/dms-https.conf.example` for HTTPS reverse proxy shape.
+```text
+public domain
+  |
+  v
+Nginx
+  |-- /      -> frontend static files
+  `-- /api/* -> FastAPI HTTP
+```
 
-Current Nginx HTTP routing:
+Docker Compose mounts the workspace model directory into the API container:
 
-- `/` serves static files from `/usr/share/nginx/html`.
-- `/api/` proxies to `api:8000/api/`.
-- `/ws/` proxies WebSocket traffic to `api:8000/ws/`.
+```text
+../model -> /models
+MODEL_PATH=/models/final_model.pth
+```
 
-The Compose file mounts `./frontend-dist` as the Nginx static root, but this
-repository currently does not contain a frontend build.
+The MySQL service is available behind the `persistence` Compose profile. It is
+not required for the active v1 HTTP inference flow.

@@ -1,6 +1,3 @@
-from datetime import datetime
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -30,22 +27,28 @@ class ModelManifest(BaseModel):
     classes: tuple[DetectionClass, ...]
 
 
+class ModelRuntimeInfo(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str
+    architecture: str
+    class_names: list[str] = Field(alias="classNames")
+    device: str
+    input_size: int = Field(alias="inputSize")
+    score_activation: str = Field(alias="scoreActivation")
+
+
+class InferenceTelemetry(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    processing_fps: float = Field(alias="processingFps", ge=0.0)
+    preprocess_ms: float = Field(alias="preprocessMs", ge=0.0)
+    inference_ms: float = Field(alias="inferenceMs", ge=0.0)
+    postprocess_ms: float = Field(alias="postprocessMs", ge=0.0)
+    server_total_ms: float = Field(alias="serverTotalMs", ge=0.0)
+
+
 class InferenceResult(BaseModel):
-    is_distracted: bool
-    label: str
-    confidence: float = Field(ge=0.0, le=1.0)
-
-
-class FrameMeta(BaseModel):
-    type: Literal["frame_meta"]
-    frame_id: str
-    captured_at: datetime
-    content_type: str
-
-
-class QueuedFrame(BaseModel):
-    session_id: str
-    meta: FrameMeta
-    jpeg_bytes: bytes
-
-    model_config = {"arbitrary_types_allowed": True}
+    detections: list[DetectionScore]
+    model: ModelRuntimeInfo
+    telemetry: InferenceTelemetry

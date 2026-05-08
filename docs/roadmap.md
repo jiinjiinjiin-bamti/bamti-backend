@@ -1,82 +1,65 @@
 # Roadmap
 
-This roadmap lists next work based on the current repository state. Items here
-are not implemented unless they are also listed in `docs/current-status.md`.
+Items here are planned work and are not implemented unless also listed in
+`docs/current-status.md`.
 
 ## Near Term
 
-1. Define and implement `distraction_event` persistence policy.
-   - Do not store one row per frame.
-   - Treat alerts as state transitions: open an event when
-     `AlertEngine.evaluate()` first returns `distraction_detected` after an
-     attentive period, and close the event when alerts clear or the session ends.
-   - Store event-level fields only: label/code, severity, representative
-     confidence, message, started_at, and ended_at.
-   - Update `session_summary` from stored event rows once event persistence exists.
+1. Verify frontend integration against the real v1 HTTP model API.
+   - Confirm `/api/v1/detection-classes` returns the three checkpoint classes.
+   - Confirm `/api/v1/inference/frame` drives Detection Status from model output.
+   - Confirm 1-minute measurement JSON files are written through
+     `/api/v1/telemetry/runs`.
 
-2. Add database tests.
-   - Add repository tests using a test database strategy.
-   - Keep tests focused on the three persisted concepts:
-     `driving_session`, `distraction_event`, and `session_summary`.
+2. Add model startup diagnostics.
+   - Surface model path, device, class names, and load status in a lightweight
+     status endpoint if needed.
+   - Keep `/api/health` lightweight.
 
-3. Add migrations.
-   - Introduce Alembic or another explicit migration workflow.
-   - Stop relying on `Base.metadata.create_all` for environments beyond local MVP.
+3. Improve frame validation.
+   - Add JPEG magic-byte validation or decode-time error handling.
+   - Keep validation cheap enough for repeated HTTP frame uploads.
 
-4. Consider stronger JPEG validation.
-   - Decide whether to validate JPEG magic bytes before enqueueing.
-   - Keep any validation lightweight enough for the WebSocket hot path.
+4. Add persisted performance-run retrieval.
+   - `GET /api/v1/telemetry/runs` currently lists files.
+   - Add a detail endpoint only if the frontend needs to load historical JSON.
 
 ## Model Runner Evolution
 
-1. Expand runner selection.
-   - Replace hardcoded `get_runner()` branching with a manifest-backed loader.
-   - Keep `MockRunner` as the default local runner.
+1. Measure CPU, MPS, and CUDA behavior.
+   - Compare `MODEL_DEVICE=cpu`, `mps`, and `cuda` where available.
+   - Record results through the one-minute measurement flow.
 
-2. Add `PytorchRunner`.
+2. Add ONNX Runtime runner if needed.
    - Keep it behind `InferenceRunner`.
-   - Do not change WebSocket or alert code for runner-specific details.
+   - Do not change the v1 route contract for runner-specific details.
 
-3. Add `OnnxRunner`.
-   - Keep it behind `InferenceRunner`.
-   - Make it selectable by manifest/config once available.
+3. Add runner warmup if cold-start latency becomes visible.
+
+## Persistence
+
+1. Revisit database usage after inference integration stabilizes.
+   - Define session/event persistence separately from raw frame handling.
+   - Avoid storing raw frames by default.
+
+2. Add migrations.
+   - Introduce Alembic or another explicit migration workflow before production
+     database changes.
+
+## Transport
+
+1. Reintroduce WebSocket only after HTTP v1 baseline measurements are complete.
+   - Treat it as a separate design step.
+   - Preserve the ability to compare HTTP and WebSocket results using the same
+     one-minute telemetry payload shape.
 
 ## Deployment
 
-1. Harden Docker Compose for deployment.
-   - Add production environment documentation.
-   - Decide how frontend artifacts are produced and mounted into Nginx.
+1. Harden Docker Compose for the actual model.
+   - Document model volume mounting.
+   - Confirm the container has the required torch/torchvision runtime.
 
 2. Complete HTTPS setup.
-   - Add the operational steps or scripts for Let's Encrypt certificate issuance.
-   - Keep `/api/` and `/ws/` routing behavior unchanged.
-
-3. Extend GitHub Actions.
-   - The current workflow runs compile and tests.
-   - Add deployment only after target server, secrets, and release process are defined.
-
-## Observability And Operations
-
-1. Add structured logging.
-   - Log session start/end.
-   - Log runner selection.
-   - Log WebSocket disconnects and validation errors.
-
-2. Add health/readiness distinction.
-   - Keep `/api/health` lightweight.
-   - Add database readiness only if needed by deployment.
-
-3. Add configuration documentation.
-   - Document `APP_NAME`, `ENVIRONMENT`, `INFERENCE_RUNNER`, `FRAME_QUEUE_SIZE`,
-     `WEBSOCKET_IDLE_TIMEOUT_SECONDS`, `WEBSOCKET_DRAIN_TIMEOUT_SECONDS`,
-     `MAX_FRAME_BYTES`, and `DATABASE_URL`.
-
-## API And Contract Quality
-
-1. Add more WebSocket tests.
-   - Invalid JSON.
-   - Queue overflow behavior.
-
-2. Add API schemas as the HTTP surface grows.
-   - Keep schemas explicit and small.
-   - Avoid adding broad abstractions before more endpoints exist.
+   - Keep `/api/` routing stable.
+   - Add certificate automation only after the target deployment environment is
+     fixed.

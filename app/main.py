@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import api_router
 from app.core.config import settings
-from app.ws.inference import router as ws_router
 
 
 def create_app() -> FastAPI:
@@ -17,7 +16,6 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
     app.include_router(api_router, prefix="/api")
-    app.include_router(ws_router, prefix="/ws")
     return app
 
 

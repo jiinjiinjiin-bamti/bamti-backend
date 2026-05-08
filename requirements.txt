@@ -3,7 +3,12 @@ uvicorn[standard]
 python-multipart
 pydantic-settings
 sqlalchemy[asyncio]
-asyncmy
+aiomysql
+pillow
+numpy
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0+cpu
+torchvision==0.23.0
 pytest
 pytest-asyncio
 httpx

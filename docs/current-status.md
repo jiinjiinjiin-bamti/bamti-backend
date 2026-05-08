@@ -9,6 +9,12 @@ now. It is meant to help future Codex sessions quickly recover project context.
 - HTTP router is mounted under `/api`.
 - WebSocket router is mounted under `/ws`.
 - `GET /api/health` is implemented.
+- `GET /api/v1/detection-classes` is implemented as a REST model manifest
+  compatibility endpoint.
+- `POST /api/v1/inference/frame` is implemented as a REST compatibility/debug
+  endpoint backed by `MockRunner`.
+- `POST /api/v1/telemetry/runs` is implemented as an accepted-only REST
+  compatibility endpoint.
 - `GET /ws/inference` is implemented.
 - WebSocket flow supports:
   - `session_start`
@@ -41,6 +47,12 @@ now. It is meant to help future Codex sessions quickly recover project context.
   - `session_summary`
 - Repository classes exist for sessions, events, and summaries.
 - WebSocket lifecycle persistence is isolated in `app/ws/lifecycle.py`.
+- REST compatibility inference does not create `driving_session`,
+  `session_summary`, or `distraction_event` rows.
+- Local development CORS is enabled only for:
+  - `http://localhost:5173`
+  - `http://127.0.0.1:5173`
+  - `http://localhost:3000`
 - Dockerfile exists.
 - Docker Compose defines `api`, `mysql`, and `nginx`.
 - Nginx config proxies `/api/` and `/ws/`.
@@ -89,12 +101,15 @@ docker compose exec api python scripts/ws_smoke_test.py
 - `AGENTS.md`: project rules for future agent sessions.
 - `docs/websocket-contract.md`: current WebSocket contract.
 - `app/main.py`: FastAPI app creation and router mounting.
+- `app/api/v1.py`: REST compatibility endpoints for detection classes,
+  single-frame debug inference, and accepted-only telemetry run submission.
 - `app/ws/inference.py`: WebSocket inference endpoint.
 - `app/ws/lifecycle.py`: WebSocket session persistence helper.
 - `app/ws/manager.py`: per-session queue management.
 - `app/inference/runner.py`: runner interface.
 - `app/inference/mock_runner.py`: MVP runner.
 - `app/inference/manifest.py`: runner selection.
+- `app/inference/adapter.py`: converts runner output into REST detection scores.
 - `app/alerts/engine.py`: alert logic.
 - `app/storage/models.py`: SQLAlchemy models.
 - `app/storage/repositories.py`: repository classes.
@@ -105,6 +120,21 @@ docker compose exec api python scripts/ws_smoke_test.py
 ## Known Caveats
 
 - WebSocket JSON parsing and transport-level validation are implemented inside the endpoint.
+- The final real-time inference path remains WebSocket `GET /ws/inference`.
+  REST `POST /api/v1/inference/frame` is for frontend compatibility and debug
+  only, and is not the real-time standard path.
+- REST endpoint roles:
+  - `GET /api/v1/detection-classes` exposes the current model class manifest and
+    can remain useful after real model integration.
+  - `POST /api/v1/inference/frame` accepts one JPEG frame, runs `MockRunner`,
+    and returns detection scores without persistence.
+  - `POST /api/v1/telemetry/runs` returns `accepted` and currently does not
+    persist telemetry payloads.
+- WebSocket `GET /ws/inference` owns real-time frame streaming,
+  `inference_result` messages, session lifecycle, and ping/pong.
+- Production deployment should prefer the Nginx same-origin shape where `/api/*`
+  and `/ws/*` are served from the public domain. The CORS allowance is for local
+  frontend dev-server integration only.
 - Frame content type validation currently trusts the client-provided
   `frame_meta.content_type`; JPEG magic bytes are not validated yet.
 - The database schema records only `active` or `ended` session status. Normal

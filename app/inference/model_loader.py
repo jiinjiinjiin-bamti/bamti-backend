@@ -34,8 +34,15 @@ def _resolve_device(device_name: str) -> torch.device:
     return torch.device("cpu")
 
 
+def _configure_torch_threads() -> None:
+    if settings.torch_num_threads > 0:
+        torch.set_num_threads(settings.torch_num_threads)
+
+
 @lru_cache(maxsize=1)
 def load_model() -> LoadedModel:
+    _configure_torch_threads()
+
     model_path = settings.model_path
     if not model_path.exists():
         raise FileNotFoundError(f"Model file was not found: {model_path}")

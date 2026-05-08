@@ -23,6 +23,7 @@ class Settings(BaseSettings):
         default="softmax",
         validation_alias=AliasChoices("MODEL_SCORE_ACTIVATION", "BAMTI_MODEL_SCORE_ACTIVATION"),
     )
+    torch_num_threads: int = Field(default=5, validation_alias=AliasChoices("TORCH_NUM_THREADS", "BAMTI_TORCH_NUM_THREADS"))
     telemetry_runs_dir: Path = Field(
         default=backend_root / "telemetry_runs",
         validation_alias=AliasChoices("TELEMETRY_RUNS_DIR", "BAMTI_TELEMETRY_RUNS_DIR"),

@@ -10,6 +10,9 @@ services:
       MODEL_DEVICE: ${MODEL_DEVICE:-cpu}
       MODEL_INPUT_SIZE: ${MODEL_INPUT_SIZE:-224}
       MODEL_SCORE_ACTIVATION: ${MODEL_SCORE_ACTIVATION:-softmax}
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-5}
+      MKL_NUM_THREADS: ${MKL_NUM_THREADS:-5}
+      TORCH_NUM_THREADS: ${TORCH_NUM_THREADS:-5}
       TELEMETRY_RUNS_DIR: ${TELEMETRY_RUNS_DIR:-/app/telemetry_runs}
       MAX_FRAME_BYTES: ${MAX_FRAME_BYTES:-1048576}
       DATABASE_URL: ${DATABASE_URL:-mysql+aiomysql://dms_user:dms_password@mysql:3306/dms}
@@ -17,7 +20,7 @@ services:
       - "8000:8000"
     volumes:
       - ../model:/models:ro
-      - telemetry-runs:/app/telemetry_runs
+      - ./telemetry_runs:/app/telemetry_runs
 
   mysql:
     profiles:
@@ -55,4 +58,3 @@ services:
 
 volumes:
   mysql-data:
-  telemetry-runs:

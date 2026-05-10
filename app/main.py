@@ -7,7 +7,7 @@ from app.core.config import settings
 
 def create_app() -> FastAPI:
     app = FastAPI(title="DMS Backend")
-    if settings.environment == "local" and settings.cors_allowed_origins:
+    if settings.cors_allowed_origins:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=list(settings.cors_allowed_origins),

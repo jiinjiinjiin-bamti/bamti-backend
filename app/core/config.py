@@ -42,6 +42,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://bamti.stableh.com",
     )
     database_url: str = "mysql+aiomysql://dms_user:dms_password@localhost:3306/dms"
 

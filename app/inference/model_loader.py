@@ -19,11 +19,12 @@ class BamtiVisionModel(nn.Module):
 
 
 class LoadedModel:
-    def __init__(self, model: nn.Module, class_names: list[str], device: torch.device, model_path: Path) -> None:
+    def __init__(self, model: nn.Module, class_names: list[str], device: torch.device, model_path: Path, compiled: bool) -> None:
         self.model = model
         self.class_names = class_names
         self.device = device
         self.model_path = model_path
+        self.compiled = compiled
 
 
 def _resolve_device(device_name: str) -> torch.device:
@@ -39,8 +40,16 @@ def _configure_torch_threads() -> None:
         torch.set_num_threads(settings.torch_num_threads)
 
 
-@lru_cache(maxsize=1)
-def load_model() -> LoadedModel:
+def _compile_model(model: nn.Module) -> nn.Module:
+    return torch.compile(
+        model,
+        backend=settings.torch_compile_backend,
+        mode=settings.torch_compile_mode,
+    )
+
+
+@lru_cache(maxsize=2)
+def load_model(compiled: bool = False) -> LoadedModel:
     _configure_torch_threads()
 
     model_path = settings.model_path
@@ -58,10 +67,13 @@ def load_model() -> LoadedModel:
     device = _resolve_device(settings.model_device)
     model.to(device)
     model.eval()
+    if compiled:
+        model = _compile_model(model)
 
     return LoadedModel(
         model=model,
         class_names=class_names,
         device=device,
         model_path=model_path,
+        compiled=compiled,
     )

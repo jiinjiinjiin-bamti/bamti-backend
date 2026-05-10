@@ -34,8 +34,11 @@ def _parse_json_message(raw_message: str) -> dict:
     return payload
 
 
-@router.websocket("/inference/stream")
-async def inference_stream(websocket: WebSocket) -> None:
+async def run_latest_pending_inference_stream(
+    websocket: WebSocket,
+    runner_name: str | None = None,
+    runtime_metadata: dict | None = None,
+) -> None:
     await websocket.accept()
 
     session_id: str | None = None
@@ -63,7 +66,7 @@ async def inference_stream(websocket: WebSocket) -> None:
     async def process_latest_frames() -> None:
         nonlocal pending_frame
 
-        runner = get_runner(settings.inference_runner)
+        runner = get_runner(runner_name or settings.inference_runner)
 
         while not stop_event.is_set():
             await frame_available.wait()
@@ -129,6 +132,7 @@ async def inference_stream(websocket: WebSocket) -> None:
                         "serverTime": _server_time_ms(),
                         "transport": "websocket",
                         "queuePolicy": "latest_pending_only",
+                        **(runtime_metadata or {}),
                     },
                 )
                 continue
@@ -218,3 +222,8 @@ async def inference_stream(websocket: WebSocket) -> None:
             pass
         if websocket.application_state != WebSocketState.DISCONNECTED:
             await websocket.close()
+
+
+@router.websocket("/inference/stream")
+async def inference_stream(websocket: WebSocket) -> None:
+    await run_latest_pending_inference_stream(websocket)

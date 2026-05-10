@@ -12,11 +12,14 @@ from app.inference.telemetry import processing_fps_counter
 
 
 class BamtiTorchRunner(InferenceRunner):
+    def __init__(self, use_compiled_model: bool = False) -> None:
+        self.use_compiled_model = use_compiled_model
+
     async def infer(self, frame: bytes) -> InferenceResult:
         return await asyncio.to_thread(self._infer_sync, frame)
 
     def manifest(self) -> ModelManifest:
-        loaded_model = load_model()
+        loaded_model = load_model(self.use_compiled_model)
         return ModelManifest(
             model_version=loaded_model.model_path.stem,
             classes=tuple(
@@ -32,7 +35,7 @@ class BamtiTorchRunner(InferenceRunner):
         )
 
     def _infer_sync(self, frame: bytes) -> InferenceResult:
-        loaded_model = load_model()
+        loaded_model = load_model(self.use_compiled_model)
 
         preprocess_started = time.perf_counter()
         input_tensor = image_bytes_to_tensor(frame, loaded_model.device)
@@ -65,7 +68,7 @@ class BamtiTorchRunner(InferenceRunner):
             detections=detections,
             model=ModelRuntimeInfo(
                 name=loaded_model.model_path.name,
-                architecture="vit_b_16",
+                architecture="vit_b_16+torch_compile" if loaded_model.compiled else "vit_b_16",
                 class_names=loaded_model.class_names,
                 device=str(loaded_model.device),
                 input_size=settings.model_input_size,

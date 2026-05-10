@@ -8,6 +8,10 @@ ENV TORCH_NUM_THREADS=5
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir --upgrade pip
 
 COPY requirements.txt .

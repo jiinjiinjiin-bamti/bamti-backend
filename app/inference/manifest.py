@@ -7,6 +7,10 @@ def get_runner(name: str = "bamti-torch") -> InferenceRunner:
         from app.inference.torch_runner import BamtiTorchRunner
 
         return BamtiTorchRunner()
+    if name in {"bamti-torch-compiled", "torch-compiled"}:
+        from app.inference.torch_runner import BamtiTorchRunner
+
+        return BamtiTorchRunner(use_compiled_model=True)
     raise ValueError(f"Unsupported runner: {name}")
 
 

@@ -24,6 +24,14 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("MODEL_SCORE_ACTIVATION", "BAMTI_MODEL_SCORE_ACTIVATION"),
     )
     torch_num_threads: int = Field(default=5, validation_alias=AliasChoices("TORCH_NUM_THREADS", "BAMTI_TORCH_NUM_THREADS"))
+    torch_compile_backend: str = Field(
+        default="inductor",
+        validation_alias=AliasChoices("TORCH_COMPILE_BACKEND", "BAMTI_TORCH_COMPILE_BACKEND"),
+    )
+    torch_compile_mode: str = Field(
+        default="reduce-overhead",
+        validation_alias=AliasChoices("TORCH_COMPILE_MODE", "BAMTI_TORCH_COMPILE_MODE"),
+    )
     telemetry_runs_dir: Path = Field(
         default=backend_root / "telemetry_runs",
         validation_alias=AliasChoices("TELEMETRY_RUNS_DIR", "BAMTI_TELEMETRY_RUNS_DIR"),

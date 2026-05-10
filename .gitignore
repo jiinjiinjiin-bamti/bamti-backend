@@ -19,6 +19,7 @@ env/
 .env
 .env.*
 !.env.example
+!.env.cuda.example
 
 # Build artifacts
 dist/

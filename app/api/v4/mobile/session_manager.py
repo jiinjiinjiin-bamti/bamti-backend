@@ -60,7 +60,7 @@ class MobileSessionManager:
         if "{sessionId}" in base:
             camera_url = base.replace("{sessionId}", session_id)
         else:
-            camera_url = f"{base}/{session_id}" if base else f"/camera/{session_id}"
+            camera_url = f"{base}?sessionId={session_id}" if base else f"/camera?sessionId={session_id}"
         session = MobileSession(
             session_id=session_id,
             camera_url=camera_url,

@@ -18,8 +18,8 @@ env/
 # Environment variables
 .env
 .env.*
-!.env.example
-!.env.cuda.example
+!.env
+!.env.cuda
 
 # Build artifacts
 dist/

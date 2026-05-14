@@ -1,6 +1,7 @@
+import gc
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 import torch
@@ -44,6 +45,10 @@ class LoadedModel:
     architecture: str
     service_classes: tuple[ServiceDetectionClass, ...] = ()
     raw_class_names: tuple[str, ...] = ()
+
+
+_active_model_cache: dict[tuple[Path, bool], LoadedModel] = {}
+_active_model_lock = Lock()
 
 
 def _resolve_device(device_name: str) -> torch.device:
@@ -97,6 +102,15 @@ def _is_timm_custom_vit_state_dict(state_dict: dict[str, Any]) -> bool:
     return any(key.startswith("backbone.patch_embed.") or key.startswith("backbone.blocks.") for key in state_dict)
 
 
+def _release_cached_models() -> None:
+    _active_model_cache.clear()
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    if torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+
+
 def _load_timm_custom_vit_model(state_dict: dict[str, Any], compiled: bool, model_path: Path) -> LoadedModel:
     model = BamtiTimmVisionModel(num_classes=len(raw_action_class_names))
     model.load_state_dict(state_dict, strict=True)
@@ -143,15 +157,29 @@ def _load_torchvision_vit_model(checkpoint: dict[str, Any], state_dict: dict[str
     )
 
 
-@lru_cache(maxsize=2)
 def load_model(compiled: bool = False) -> LoadedModel:
     return load_model_from_path(settings.model_path, compiled)
 
 
-@lru_cache(maxsize=4)
 def load_model_from_path(model_path: Path, compiled: bool = False) -> LoadedModel:
     _configure_torch_threads()
 
+    model_path = model_path.expanduser().resolve()
+    cache_key = (model_path, compiled)
+    with _active_model_lock:
+        cached_model = _active_model_cache.get(cache_key)
+        if cached_model is not None:
+            return cached_model
+
+        if _active_model_cache:
+            _release_cached_models()
+
+        loaded_model = _load_model_from_path_uncached(model_path, compiled)
+        _active_model_cache[cache_key] = loaded_model
+        return loaded_model
+
+
+def _load_model_from_path_uncached(model_path: Path, compiled: bool = False) -> LoadedModel:
     if not model_path.exists():
         raise FileNotFoundError(f"Model file was not found: {model_path}")
 

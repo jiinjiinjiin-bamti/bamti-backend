@@ -124,4 +124,4 @@ class BamtiTorchRunner(InferenceRunner):
 
     def _threshold_for_class(self, loaded_model: LoadedModel, class_name: str) -> float:
         service_class = self._service_class_by_name(loaded_model, class_name)
-        return service_class.threshold if service_class else 0.65
+        return service_class.threshold if service_class else 0.70

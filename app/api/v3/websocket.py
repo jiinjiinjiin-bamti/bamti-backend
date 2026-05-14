@@ -50,10 +50,23 @@ async def run_latest_pending_inference_stream(
     queue_lock = asyncio.Lock()
     send_lock = asyncio.Lock()
     stop_event = asyncio.Event()
+    websocket_close_sent = False
 
     async def send_json(payload: dict) -> None:
         async with send_lock:
             await websocket.send_json(payload)
+
+    async def close_websocket(code: int = status.WS_1000_NORMAL_CLOSURE) -> None:
+        nonlocal websocket_close_sent
+
+        if websocket_close_sent:
+            return
+        websocket_close_sent = True
+        try:
+            await websocket.close(code=code)
+        except RuntimeError as exc:
+            if "Unexpected ASGI message 'websocket.close'" not in str(exc):
+                raise
 
     async def send_error(code: str, message: str, frame_id: str | None = None) -> None:
         payload = {
@@ -90,7 +103,7 @@ async def run_latest_pending_inference_stream(
                 logger.exception("Latest-pending inference failed for session %s frame %s", session_id, frame.meta.frame_id)
                 stop_event.set()
                 await send_error("inference_failed", "WebSocket inference failed. Check backend model/runtime logs.", frame.meta.frame_id)
-                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+                await close_websocket(code=status.WS_1011_INTERNAL_ERROR)
                 return
             server_responded_at = _server_time_ms()
 
@@ -163,7 +176,7 @@ async def run_latest_pending_inference_stream(
                         "droppedFrames": dropped_frames,
                     },
                 )
-                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+                await close_websocket(code=status.WS_1000_NORMAL_CLOSURE)
                 return
 
             if message_type != "frame_meta":
@@ -230,7 +243,7 @@ async def run_latest_pending_inference_stream(
         except asyncio.CancelledError:
             pass
         if websocket.application_state != WebSocketState.DISCONNECTED:
-            await websocket.close()
+            await close_websocket()
 
 
 @router.websocket("/inference/stream")

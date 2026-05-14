@@ -49,10 +49,23 @@ async def inference_stream(websocket: WebSocket) -> None:
     send_lock = asyncio.Lock()
     stop_event = asyncio.Event()
     score_averager = RollingScoreAverager(window_seconds=1.0)
+    websocket_close_sent = False
 
     async def send_json(payload: dict) -> None:
         async with send_lock:
             await websocket.send_json(payload)
+
+    async def close_websocket(code: int = status.WS_1000_NORMAL_CLOSURE) -> None:
+        nonlocal websocket_close_sent
+
+        if websocket_close_sent:
+            return
+        websocket_close_sent = True
+        try:
+            await websocket.close(code=code)
+        except RuntimeError as exc:
+            if "Unexpected ASGI message 'websocket.close'" not in str(exc):
+                raise
 
     async def send_error(code: str, message: str, frame_id: str | None = None) -> None:
         payload = {
@@ -89,7 +102,7 @@ async def inference_stream(websocket: WebSocket) -> None:
                 logger.exception("V6 inference failed for session %s frame %s", session_id, frame.meta.frame_id)
                 stop_event.set()
                 await send_error("inference_failed", "WebSocket inference failed. Check backend model/runtime logs.", frame.meta.frame_id)
-                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+                await close_websocket(code=status.WS_1011_INTERNAL_ERROR)
                 return
             averaged_detections = score_averager.average(result.detections)
             server_responded_at = _server_time_ms()
@@ -170,7 +183,7 @@ async def inference_stream(websocket: WebSocket) -> None:
                         "droppedFrames": dropped_frames,
                     },
                 )
-                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+                await close_websocket(code=status.WS_1000_NORMAL_CLOSURE)
                 return
 
             if message_type != "frame_meta":
@@ -237,4 +250,4 @@ async def inference_stream(websocket: WebSocket) -> None:
         except asyncio.CancelledError:
             pass
         if websocket.application_state != WebSocketState.DISCONNECTED:
-            await websocket.close()
+            await close_websocket()

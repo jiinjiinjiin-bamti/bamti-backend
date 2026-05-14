@@ -6,6 +6,7 @@ sqlalchemy[asyncio]
 aiomysql
 pillow
 numpy
+timm
 pytest
 pytest-asyncio
 httpx

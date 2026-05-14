@@ -4,7 +4,8 @@ import time
 import torch
 
 from app.core.config import settings
-from app.inference.model_loader import load_model
+from app.inference.class_mapping import ServiceDetectionClass
+from app.inference.model_loader import LoadedModel, load_model
 from app.inference.preprocessing import image_bytes_to_tensor
 from app.inference.runner import InferenceRunner
 from app.inference.schemas import DetectionClass, DetectionScore, InferenceResult, InferenceTelemetry, ModelManifest, ModelRuntimeInfo
@@ -26,9 +27,9 @@ class BamtiTorchRunner(InferenceRunner):
                 DetectionClass(
                     variable_name=class_name,
                     class_id=class_name,
-                    display_name=class_name,
-                    description=f"BAMTI model class: {class_name}",
-                    threshold=0.65,
+                    display_name=self._display_name_for_class(loaded_model, class_name),
+                    description=self._description_for_class(loaded_model, class_name),
+                    threshold=self._threshold_for_class(loaded_model, class_name),
                 )
                 for class_name in loaded_model.class_names
             ),
@@ -52,15 +53,7 @@ class BamtiTorchRunner(InferenceRunner):
         inference_ms = (time.perf_counter() - inference_started) * 1000
 
         postprocess_started = time.perf_counter()
-        detections = [
-            DetectionScore(
-                variable_name=class_name,
-                class_id=class_name,
-                display_name=class_name,
-                score=round(float(score), 4),
-            )
-            for class_name, score in zip(loaded_model.class_names, scores, strict=True)
-        ]
+        detections = self._detections_from_scores(loaded_model, scores)
         postprocess_ms = (time.perf_counter() - postprocess_started) * 1000
         processing_fps = processing_fps_counter.mark_processed()
 
@@ -68,7 +61,7 @@ class BamtiTorchRunner(InferenceRunner):
             detections=detections,
             model=ModelRuntimeInfo(
                 name=loaded_model.model_path.name,
-                architecture="vit_b_16+torch_compile" if loaded_model.compiled else "vit_b_16",
+                architecture=f"{loaded_model.architecture}+torch_compile" if loaded_model.compiled else loaded_model.architecture,
                 class_names=loaded_model.class_names,
                 device=str(loaded_model.device),
                 input_size=settings.model_input_size,
@@ -87,3 +80,48 @@ class BamtiTorchRunner(InferenceRunner):
         if settings.model_score_activation == "sigmoid":
             return torch.sigmoid(logits)
         return torch.softmax(logits, dim=1)
+
+    def _detections_from_scores(self, loaded_model: LoadedModel, scores: torch.Tensor) -> list[DetectionScore]:
+        if loaded_model.service_classes:
+            raw_score_by_class = {
+                class_name: float(score)
+                for class_name, score in zip(loaded_model.raw_class_names, scores, strict=True)
+            }
+            return [
+                DetectionScore(
+                    variable_name=service_class.variable_name,
+                    class_id=service_class.variable_name,
+                    display_name=service_class.display_name,
+                    score=round(self._average_service_score(service_class, raw_score_by_class), 4),
+                )
+                for service_class in loaded_model.service_classes
+            ]
+
+        return [
+            DetectionScore(
+                variable_name=class_name,
+                class_id=class_name,
+                display_name=class_name,
+                score=round(float(score), 4),
+            )
+            for class_name, score in zip(loaded_model.class_names, scores, strict=True)
+        ]
+
+    def _average_service_score(self, service_class: ServiceDetectionClass, raw_score_by_class: dict[str, float]) -> float:
+        scores = [raw_score_by_class[class_name] for class_name in service_class.raw_class_names]
+        return sum(scores) / len(scores)
+
+    def _service_class_by_name(self, loaded_model: LoadedModel, class_name: str) -> ServiceDetectionClass | None:
+        return next((service_class for service_class in loaded_model.service_classes if service_class.variable_name == class_name), None)
+
+    def _display_name_for_class(self, loaded_model: LoadedModel, class_name: str) -> str:
+        service_class = self._service_class_by_name(loaded_model, class_name)
+        return service_class.display_name if service_class else class_name
+
+    def _description_for_class(self, loaded_model: LoadedModel, class_name: str) -> str:
+        service_class = self._service_class_by_name(loaded_model, class_name)
+        return service_class.description if service_class else f"BAMTI model class: {class_name}"
+
+    def _threshold_for_class(self, loaded_model: LoadedModel, class_name: str) -> float:
+        service_class = self._service_class_by_name(loaded_model, class_name)
+        return service_class.threshold if service_class else 0.65

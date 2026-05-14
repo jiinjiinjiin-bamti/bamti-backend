@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     environment: str = Field(default="local", validation_alias=AliasChoices("ENVIRONMENT", "BAMTI_ENVIRONMENT"))
     inference_runner: str = Field(default="bamti-torch", validation_alias=AliasChoices("INFERENCE_RUNNER", "BAMTI_INFERENCE_RUNNER"))
     model_path: Path = Field(
-        default=workspace_root / "model" / "final_model.pth",
+        default=workspace_root / "model" / "exp04_pseudo_ir_aug_DayBest",
         validation_alias=AliasChoices("MODEL_PATH", "BAMTI_MODEL_PATH"),
     )
     model_device: str = Field(default="cpu", validation_alias=AliasChoices("MODEL_DEVICE", "BAMTI_MODEL_DEVICE"))
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     )
     database_url: str = "mysql+aiomysql://dms_user:dms_password@localhost:3306/dms"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()

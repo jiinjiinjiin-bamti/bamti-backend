@@ -13,16 +13,16 @@ class FakeRunner:
         return InferenceResult(
             detections=[
                 DetectionScore(
-                    variable_name="forward_inattention",
-                    class_id="forward_inattention",
-                    display_name="forward_inattention",
-                    score=0.73,
+                    variable_name="phone_use",
+                    class_id="phone_use",
+                    display_name="휴대기기 조작",
+                    score=0.18,
                 ),
             ],
             model=ModelRuntimeInfo(
-                name="final_model.pth",
-                architecture="vit_b_16",
-                class_names=["forward_inattention"],
+                name="exp04_pseudo_ir_aug_DayBest",
+                architecture="timm_vit_b_16_custom",
+                class_names=["phone_use"],
                 device="cpu",
                 input_size=224,
                 score_activation="softmax",
@@ -71,7 +71,7 @@ def test_v2_websocket_session_and_frame_inference(monkeypatch) -> None:
         assert result["sessionId"] == "session-1"
         assert result["frameId"] == "frame-1"
         assert result["clientSentAt"] == "12345.67"
-        assert result["detections"][0]["variableName"] == "forward_inattention"
+        assert result["detections"][0]["variableName"] == "phone_use"
         assert result["telemetry"]["serverTotalMs"] == 103.0
 
         websocket.send_json(

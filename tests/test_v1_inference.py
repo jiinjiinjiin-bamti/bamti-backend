@@ -13,31 +13,31 @@ class FakeRunner:
         return InferenceResult(
             detections=[
                 DetectionScore(
-                    variable_name="forward_inattention",
-                    class_id="forward_inattention",
-                    display_name="forward_inattention",
-                    score=0.73,
+                    variable_name="normal_driving",
+                    class_id="normal_driving",
+                    display_name="정상 주행",
+                    score=0.72,
                 ),
                 DetectionScore(
-                    variable_name="surrounding_inattention",
-                    class_id="surrounding_inattention",
-                    display_name="surrounding_inattention",
-                    score=0.19,
+                    variable_name="phone_use",
+                    class_id="phone_use",
+                    display_name="휴대기기 조작",
+                    score=0.18,
                 ),
                 DetectionScore(
-                    variable_name="vehicle_interaction",
-                    class_id="vehicle_interaction",
-                    display_name="vehicle_interaction",
-                    score=0.08,
+                    variable_name="drowsiness",
+                    class_id="drowsiness",
+                    display_name="졸음",
+                    score=0.04,
                 ),
             ],
             model=ModelRuntimeInfo(
-                name="final_model.pth",
-                architecture="vit_b_16",
+                name="exp04_pseudo_ir_aug_DayBest",
+                architecture="timm_vit_b_16_custom",
                 class_names=[
-                    "forward_inattention",
-                    "surrounding_inattention",
-                    "vehicle_interaction",
+                    "normal_driving",
+                    "phone_use",
+                    "drowsiness",
                 ],
                 device="cpu",
                 input_size=224,
@@ -54,27 +54,27 @@ class FakeRunner:
 
     def manifest(self) -> ModelManifest:
         return ModelManifest(
-            model_version="final_model",
+            model_version="exp04_pseudo_ir_aug_DayBest",
             classes=(
                 DetectionClass(
-                    variable_name="forward_inattention",
-                    class_id="forward_inattention",
-                    display_name="forward_inattention",
-                    description="BAMTI model class: forward_inattention",
-                    threshold=0.65,
+                    variable_name="normal_driving",
+                    class_id="normal_driving",
+                    display_name="정상 주행",
+                    description="A1 - 정상 주행",
+                    threshold=0.50,
                 ),
                 DetectionClass(
-                    variable_name="surrounding_inattention",
-                    class_id="surrounding_inattention",
-                    display_name="surrounding_inattention",
-                    description="BAMTI model class: surrounding_inattention",
-                    threshold=0.65,
+                    variable_name="phone_use",
+                    class_id="phone_use",
+                    display_name="휴대기기 조작",
+                    description="A5, A6, A7, A8, A9 - 휴대기기 조작",
+                    threshold=0.13,
                 ),
                 DetectionClass(
-                    variable_name="vehicle_interaction",
-                    class_id="vehicle_interaction",
-                    display_name="vehicle_interaction",
-                    description="BAMTI model class: vehicle_interaction",
+                    variable_name="drowsiness",
+                    class_id="drowsiness",
+                    display_name="졸음",
+                    description="A12 - 졸음",
                     threshold=0.65,
                 ),
             ),
@@ -107,11 +107,11 @@ def test_detection_classes_returns_model_manifest(monkeypatch) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["modelVersion"] == "final_model"
+    assert payload["modelVersion"] == "exp04_pseudo_ir_aug_DayBest"
     assert [item["variableName"] for item in payload["classes"]] == [
-        "forward_inattention",
-        "surrounding_inattention",
-        "vehicle_interaction",
+        "normal_driving",
+        "phone_use",
+        "drowsiness",
     ]
 
 
@@ -125,9 +125,9 @@ def test_inference_frame_accepts_jpeg_and_returns_detection_scores(monkeypatch) 
     payload = response.json()
     assert payload["frameId"] == "rest-frame-1"
     assert payload["clientSentAt"] == "12345.67"
-    assert payload["detections"][0]["variableName"] == "forward_inattention"
-    assert payload["detections"][0]["score"] == 0.73
-    assert payload["model"]["architecture"] == "vit_b_16"
+    assert payload["detections"][0]["variableName"] == "normal_driving"
+    assert payload["detections"][0]["score"] == 0.72
+    assert payload["model"]["architecture"] == "timm_vit_b_16_custom"
     assert payload["telemetry"]["processingFps"] == 10.0
     assert payload["telemetry"]["serverTotalMs"] == 73.0
 

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 from dataclasses import dataclass
 from json import JSONDecodeError
@@ -15,6 +16,7 @@ from app.inference.score_averaging import RollingScoreAverager
 
 
 router = APIRouter(tags=["v6-inference"])
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -81,7 +83,14 @@ async def inference_stream(websocket: WebSocket) -> None:
             if frame is None:
                 continue
 
-            result = await runner.infer(frame.frame_bytes)
+            try:
+                result = await runner.infer(frame.frame_bytes)
+            except Exception:
+                logger.exception("V6 inference failed for session %s frame %s", session_id, frame.meta.frame_id)
+                stop_event.set()
+                await send_error("inference_failed", "WebSocket inference failed. Check backend model/runtime logs.", frame.meta.frame_id)
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+                return
             averaged_detections = score_averager.average(result.detections)
             server_responded_at = _server_time_ms()
 

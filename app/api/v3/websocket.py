@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 from dataclasses import dataclass
 from json import JSONDecodeError
@@ -14,6 +15,7 @@ from app.inference.manifest import get_runner
 
 
 router = APIRouter(tags=["v3-inference"])
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -82,7 +84,14 @@ async def run_latest_pending_inference_stream(
             if frame is None:
                 continue
 
-            result = await runner.infer(frame.frame_bytes)
+            try:
+                result = await runner.infer(frame.frame_bytes)
+            except Exception:
+                logger.exception("Latest-pending inference failed for session %s frame %s", session_id, frame.meta.frame_id)
+                stop_event.set()
+                await send_error("inference_failed", "WebSocket inference failed. Check backend model/runtime logs.", frame.meta.frame_id)
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+                return
             server_responded_at = _server_time_ms()
 
             await send_json(

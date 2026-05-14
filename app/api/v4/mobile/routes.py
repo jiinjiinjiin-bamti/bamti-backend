@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from json import JSONDecodeError
 from typing import Literal
@@ -21,6 +22,7 @@ from app.inference.manifest import get_runner
 
 
 router = APIRouter(prefix="/mobile", tags=["v4-mobile"])
+logger = logging.getLogger(__name__)
 
 
 def _server_time_ms() -> float:
@@ -148,7 +150,22 @@ async def phone_frame_stream(websocket: WebSocket, session_id: str) -> None:
             if not session.streaming:
                 continue
 
-            result = await runner.infer(frame_bytes)
+            try:
+                result = await runner.infer(frame_bytes)
+            except Exception:
+                logger.exception("Mobile v4 inference failed for session %s frame %s", session_id, frame_meta.frame_id)
+                await mobile_session_manager.set_streaming(session, False)
+                await _send_ws_error(connection, "inference_failed", "Mobile inference failed. Check backend model/runtime logs.", frame_meta.frame_id)
+                await mobile_session_manager.send_dashboard_event(
+                    session,
+                    {
+                        "type": "error",
+                        "code": "inference_failed",
+                        "message": "Mobile inference failed. Check backend model/runtime logs.",
+                        "frameId": frame_meta.frame_id,
+                    },
+                )
+                continue
             server_responded_at = _server_time_ms()
 
             await mobile_session_manager.send_dashboard_event(

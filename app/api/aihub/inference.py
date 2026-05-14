@@ -1,0 +1,57 @@
+import time
+from typing import Annotated
+
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+
+from app.api.v1.schemas import InferenceFrameResponse
+from app.core.config import settings
+from app.inference.manifest import get_model_manifest, get_runner
+from app.inference.schemas import ModelManifest
+
+
+router = APIRouter(tags=["aihub-inference"])
+
+
+@router.get("/detection-classes", response_model=ModelManifest)
+async def get_detection_classes() -> ModelManifest:
+    return get_model_manifest("aihub-torch")
+
+
+@router.post("/inference/frame", response_model=InferenceFrameResponse)
+async def infer_frame(
+    frame: Annotated[UploadFile, File()],
+    frame_id: Annotated[str | None, Form(alias="frameId")] = None,
+    client_sent_at: Annotated[str | None, Form(alias="clientSentAt")] = None,
+) -> InferenceFrameResponse:
+    if frame.content_type != "image/jpeg":
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only image/jpeg frames are supported.",
+        )
+
+    server_received_at = time.time() * 1000
+    frame_bytes = await frame.read(settings.max_frame_bytes + 1)
+    if not frame_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Frame file must not be empty.",
+        )
+    if len(frame_bytes) > settings.max_frame_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"Frame exceeds max_frame_bytes={settings.max_frame_bytes}.",
+        )
+
+    runner = get_runner("aihub-torch")
+    result = await runner.infer(frame_bytes)
+    server_responded_at = time.time() * 1000
+
+    return InferenceFrameResponse(
+        frame_id=frame_id,
+        client_sent_at=client_sent_at,
+        server_received_at=round(server_received_at, 3),
+        server_responded_at=round(server_responded_at, 3),
+        detections=result.detections,
+        model=result.model,
+        telemetry=result.telemetry,
+    )

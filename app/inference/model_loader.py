@@ -145,9 +145,13 @@ def _load_torchvision_vit_model(checkpoint: dict[str, Any], state_dict: dict[str
 
 @lru_cache(maxsize=2)
 def load_model(compiled: bool = False) -> LoadedModel:
+    return load_model_from_path(settings.model_path, compiled)
+
+
+@lru_cache(maxsize=4)
+def load_model_from_path(model_path: Path, compiled: bool = False) -> LoadedModel:
     _configure_torch_threads()
 
-    model_path = settings.model_path
     if not model_path.exists():
         raise FileNotFoundError(f"Model file was not found: {model_path}")
 

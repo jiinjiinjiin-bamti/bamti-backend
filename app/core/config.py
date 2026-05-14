@@ -17,6 +17,10 @@ class Settings(BaseSettings):
         default=workspace_root / "model" / "exp04_pseudo_ir_aug_DayBest",
         validation_alias=AliasChoices("MODEL_PATH", "BAMTI_MODEL_PATH"),
     )
+    aihub_model_path: Path = Field(
+        default=workspace_root / "model" / "final_model.pth",
+        validation_alias=AliasChoices("AIHUB_MODEL_PATH", "BAMTI_AIHUB_MODEL_PATH"),
+    )
     model_device: str = Field(default="cpu", validation_alias=AliasChoices("MODEL_DEVICE", "BAMTI_MODEL_DEVICE"))
     model_input_size: int = Field(default=224, validation_alias=AliasChoices("MODEL_INPUT_SIZE", "BAMTI_MODEL_INPUT_SIZE"))
     model_score_activation: str = Field(

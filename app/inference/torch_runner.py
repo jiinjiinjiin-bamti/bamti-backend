@@ -92,7 +92,7 @@ class BamtiTorchRunner(InferenceRunner):
                     variable_name=service_class.variable_name,
                     class_id=service_class.variable_name,
                     display_name=service_class.display_name,
-                    score=round(self._average_service_score(service_class, raw_score_by_class), 4),
+                    score=round(self._max_service_score(service_class, raw_score_by_class), 4),
                 )
                 for service_class in loaded_model.service_classes
             ]
@@ -107,9 +107,9 @@ class BamtiTorchRunner(InferenceRunner):
             for class_name, score in zip(loaded_model.class_names, scores, strict=True)
         ]
 
-    def _average_service_score(self, service_class: ServiceDetectionClass, raw_score_by_class: dict[str, float]) -> float:
+    def _max_service_score(self, service_class: ServiceDetectionClass, raw_score_by_class: dict[str, float]) -> float:
         scores = [raw_score_by_class[class_name] for class_name in service_class.raw_class_names]
-        return sum(scores) / len(scores)
+        return max(scores)
 
     def _service_class_by_name(self, loaded_model: LoadedModel, class_name: str) -> ServiceDetectionClass | None:
         return next((service_class for service_class in loaded_model.service_classes if service_class.variable_name == class_name), None)

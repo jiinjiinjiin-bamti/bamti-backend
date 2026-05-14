@@ -17,6 +17,7 @@ from app.api.aihub.mobile.schemas import (
     PhoneTelemetryMessage,
 )
 from app.api.aihub.mobile.session_manager import MobileConnection, MobileSession, mobile_session_manager
+from app.core.config import settings
 from app.inference.manifest import get_runner
 
 

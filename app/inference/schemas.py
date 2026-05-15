@@ -49,6 +49,9 @@ class InferenceTelemetry(BaseModel):
 
 
 class InferenceResult(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     detections: list[DetectionScore]
+    debug_raw_detections: list[DetectionScore] | None = Field(default=None, alias="debugRawDetections")
     model: ModelRuntimeInfo
     telemetry: InferenceTelemetry

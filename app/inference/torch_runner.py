@@ -14,9 +14,15 @@ from app.inference.telemetry import processing_fps_counter
 
 
 class BamtiTorchRunner(InferenceRunner):
-    def __init__(self, use_compiled_model: bool = False, model_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        use_compiled_model: bool = False,
+        model_path: Path | None = None,
+        include_debug_raw_detections: bool = False,
+    ) -> None:
         self.use_compiled_model = use_compiled_model
         self.model_path = model_path
+        self.include_debug_raw_detections = include_debug_raw_detections
 
     async def infer(self, frame: bytes) -> InferenceResult:
         return await asyncio.to_thread(self._infer_sync, frame)
@@ -68,6 +74,7 @@ class BamtiTorchRunner(InferenceRunner):
 
         return InferenceResult(
             detections=detections,
+            debug_raw_detections=self._debug_raw_detections_from_scores(loaded_model, scores),
             model=ModelRuntimeInfo(
                 name=loaded_model.model_path.name,
                 architecture=f"{loaded_model.architecture}+torch_compile" if loaded_model.compiled else loaded_model.architecture,
@@ -114,6 +121,20 @@ class BamtiTorchRunner(InferenceRunner):
                 score=round(float(score), 4),
             )
             for class_name, score in zip(loaded_model.class_names, scores, strict=True)
+        ]
+
+    def _debug_raw_detections_from_scores(self, loaded_model: LoadedModel, scores: torch.Tensor) -> list[DetectionScore] | None:
+        if not self.include_debug_raw_detections or not loaded_model.raw_class_names:
+            return None
+
+        return [
+            DetectionScore(
+                variable_name=class_name,
+                class_id=class_name,
+                display_name=class_name,
+                score=round(float(score), 4),
+            )
+            for class_name, score in zip(loaded_model.raw_class_names, scores, strict=True)
         ]
 
     def _max_service_score(self, service_class: ServiceDetectionClass, raw_score_by_class: dict[str, float]) -> float:

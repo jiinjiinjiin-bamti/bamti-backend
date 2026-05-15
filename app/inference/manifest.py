@@ -12,6 +12,10 @@ def get_runner(name: str = "bamti-torch") -> InferenceRunner:
         from app.inference.torch_runner import BamtiTorchRunner
 
         return BamtiTorchRunner(use_compiled_model=True)
+    if name in {"bamti-torch-debug-raw", "torch-debug-raw"}:
+        from app.inference.torch_runner import BamtiTorchRunner
+
+        return BamtiTorchRunner(include_debug_raw_detections=True)
     if name in {"aihub-torch", "torch-aihub"}:
         from app.inference.torch_runner import BamtiTorchRunner
 

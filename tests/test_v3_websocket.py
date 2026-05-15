@@ -22,6 +22,15 @@ def inference_result(frame: bytes, call_index: int) -> InferenceResult:
                 score=0.18,
             ),
         ],
+        debug_raw_detections=[
+            DetectionScore(
+                variable_name=f"A{index}",
+                class_id=f"A{index}",
+                display_name=f"A{index}",
+                score=round(index / 100, 4),
+            )
+            for index in range(1, 17)
+        ],
         model=ModelRuntimeInfo(
             name="exp04_pseudo_ir_aug_DayBest",
             architecture="timm_vit_b_16_custom",
@@ -141,3 +150,42 @@ def test_v3_websocket_requires_session_start() -> None:
         result = websocket.receive_json()
         assert result["type"] == "error"
         assert result["code"] == "session_not_started"
+
+
+def test_v4_debug_websocket_includes_raw_action_scores(monkeypatch) -> None:
+    processing_started = threading.Event()
+    release_processing = threading.Event()
+    runner = BlockingRunner(processing_started, release_processing)
+    requested_runner_names: list[str] = []
+
+    def fake_get_runner(name: str):
+        requested_runner_names.append(name)
+        return runner
+
+    monkeypatch.setattr("app.api.v3.websocket.get_runner", fake_get_runner)
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/v4/debug/inference/stream") as websocket:
+        websocket.send_json(
+            {
+                "type": "session_start",
+                "sessionId": "session-1",
+                "targetTransmissionFps": 24,
+                "transport": "websocket",
+            },
+        )
+        started = websocket.receive_json()
+        assert started["type"] == "session_started"
+        assert started["apiVersion"] == "v4-debug"
+
+        send_frame(websocket, "frame-1", JPEG_BYTES_1)
+        assert processing_started.wait(timeout=2)
+        release_processing.set()
+
+        result = websocket.receive_json()
+        assert result["type"] == "inference_result"
+        assert requested_runner_names == ["bamti-torch-debug-raw"]
+        assert [detection["variableName"] for detection in result["debugRawDetections"]] == [
+            f"A{index}"
+            for index in range(1, 17)
+        ]

@@ -49,3 +49,24 @@ def test_service_detection_scores_use_max_raw_class_score() -> None:
     assert scores_by_variable["distraction"] == 0.42
     assert scores_by_variable["drowsiness"] == 0.50
     assert scores_by_variable["rear_seat_interaction"] == 0.60
+
+
+def test_debug_raw_detection_scores_use_raw_action_classes() -> None:
+    loaded_model = LoadedModel(
+        model=torch.nn.Identity(),
+        class_names=[detection_class.variable_name for detection_class in service_detection_classes],
+        device=torch.device("cpu"),
+        model_path=Path("exp04_pseudo_ir_aug.pth"),
+        compiled=False,
+        architecture="timm_vit_b_16_custom",
+        service_classes=service_detection_classes,
+        raw_class_names=raw_action_class_names,
+    )
+    scores = torch.linspace(0.01, 0.16, steps=16)
+
+    detections = BamtiTorchRunner(include_debug_raw_detections=True)._debug_raw_detections_from_scores(loaded_model, scores)
+
+    assert detections is not None
+    assert [detection.variable_name for detection in detections] == list(raw_action_class_names)
+    assert detections[0].score == 0.01
+    assert detections[-1].score == 0.16

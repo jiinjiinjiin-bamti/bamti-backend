@@ -40,6 +40,7 @@ async def run_latest_pending_inference_stream(
     websocket: WebSocket,
     runner_name: str | None = None,
     runtime_metadata: dict | None = None,
+    include_debug_raw_detections: bool = False,
 ) -> None:
     await websocket.accept()
 
@@ -107,24 +108,29 @@ async def run_latest_pending_inference_stream(
                 return
             server_responded_at = _server_time_ms()
 
-            await send_json(
-                {
-                    "type": "inference_result",
-                    "sessionId": session_id,
-                    "frameId": frame.meta.frame_id,
-                    "clientSentAt": frame.meta.client_sent_at,
-                    "serverReceivedAt": frame.server_received_at,
-                    "serverRespondedAt": server_responded_at,
-                    "detections": [detection.model_dump(by_alias=True) for detection in result.detections],
-                    "model": result.model.model_dump(by_alias=True),
-                    "queue": {
-                        "policy": "latest_pending_only",
-                        "droppedFrames": dropped_frames,
-                        "pendingFrames": 1 if pending_frame is not None else 0,
-                    },
-                    "telemetry": result.telemetry.model_dump(by_alias=True),
+            response_payload = {
+                "type": "inference_result",
+                "sessionId": session_id,
+                "frameId": frame.meta.frame_id,
+                "clientSentAt": frame.meta.client_sent_at,
+                "serverReceivedAt": frame.server_received_at,
+                "serverRespondedAt": server_responded_at,
+                "detections": [detection.model_dump(by_alias=True) for detection in result.detections],
+                "model": result.model.model_dump(by_alias=True),
+                "queue": {
+                    "policy": "latest_pending_only",
+                    "droppedFrames": dropped_frames,
+                    "pendingFrames": 1 if pending_frame is not None else 0,
                 },
-            )
+                "telemetry": result.telemetry.model_dump(by_alias=True),
+            }
+            if include_debug_raw_detections and result.debug_raw_detections:
+                response_payload["debugRawDetections"] = [
+                    detection.model_dump(by_alias=True)
+                    for detection in result.debug_raw_detections
+                ]
+
+            await send_json(response_payload)
 
     processor_task = asyncio.create_task(process_latest_frames())
 

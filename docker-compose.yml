@@ -6,7 +6,7 @@ services:
       APP_NAME: ${APP_NAME:-DMS Backend}
       ENVIRONMENT: ${ENVIRONMENT:-local}
       INFERENCE_RUNNER: ${INFERENCE_RUNNER:-bamti-torch}
-      MODEL_PATH: ${MODEL_PATH:-/models/exp04_pseudo_ir_aug_DayBest}
+      MODEL_PATH: ${MODEL_PATH:-/models/exp04_pseudo_ir_aug.pth}
       AIHUB_MODEL_PATH: ${AIHUB_MODEL_PATH:-/models/final_model.pth}
       MODEL_DEVICE: ${MODEL_DEVICE:-cpu}
       MODEL_INPUT_SIZE: ${MODEL_INPUT_SIZE:-224}

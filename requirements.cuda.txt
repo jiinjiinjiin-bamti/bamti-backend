@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic-settings
+sqlalchemy[asyncio]
+aiomysql
+pillow
+numpy
+timm
+pytest
+pytest-asyncio
+httpx
+cryptography

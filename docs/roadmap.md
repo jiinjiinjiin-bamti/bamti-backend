@@ -1,82 +1,75 @@
 # Roadmap
 
-This roadmap lists next work based on the current repository state. Items here
-are not implemented unless they are also listed in `docs/current-status.md`.
+Items here are planned or potential work. Implemented work is tracked in `docs/current-status.md`.
 
 ## Near Term
 
-1. Define and implement `distraction_event` persistence policy.
-   - Do not store one row per frame.
-   - Treat alerts as state transitions: open an event when
-     `AlertEngine.evaluate()` first returns `distraction_detected` after an
-     attentive period, and close the event when alerts clear or the session ends.
-   - Store event-level fields only: label/code, severity, representative
-     confidence, message, started_at, and ended_at.
-   - Update `session_summary` from stored event rows once event persistence exists.
+1. Stabilize deployment model paths.
+   - Keep `.env.cuda` using container paths.
+   - Confirm `/models/exp04_pseudo_ir_aug.pth` and `/models/final_model.pth` are mounted before startup.
 
-2. Add database tests.
-   - Add repository tests using a test database strategy.
-   - Keep tests focused on the three persisted concepts:
-     `driving_session`, `distraction_event`, and `session_summary`.
+2. Improve startup diagnostics.
+   - Add an optional model status endpoint if needed.
+   - Surface selected device, model path, loaded architecture, and class count.
+   - Keep `/api/health` lightweight.
 
-3. Add migrations.
+3. Improve frame validation.
+   - Add cheap JPEG magic-byte validation or clearer decode errors.
+   - Keep validation cheap enough for repeated frame uploads.
+
+4. Measure v4 vs v6 behavior.
+   - Compare immediate scores against one-second rolling average scores.
+   - Confirm threshold behavior in the frontend for both BAMTI and AIHub profiles.
+
+## Model Runtime
+
+1. Measure CPU, MPS, and CUDA behavior.
+   - Compare `MODEL_DEVICE=cpu`, `mps`, and `cuda` where available.
+   - Record results through the one-minute measurement flow.
+
+2. Revisit model cache policy if simultaneous users require different profiles.
+   - Current behavior keeps one active loaded model.
+   - If concurrent BAMTI and AIHub usage becomes common, consider a bounded multi-model cache or separate backend processes.
+
+3. Add runner warmup if cold-start latency remains visible.
+   - Warmup must not block health check.
+   - Warmup should target the selected model profile.
+
+4. Add ONNX Runtime runner only if needed.
+   - Keep it behind `InferenceRunner`.
+   - Do not change route contracts for runner-specific details.
+
+## API Cleanup
+
+1. Decide whether v2/v3/v5 experimental WebSocket routes should remain public.
+   - v4 and v6 are the active frontend-facing paths.
+   - Older experimental versions can stay during comparison but should be documented as non-primary.
+
+2. Keep v4 debug isolated.
+   - Do not make raw `A1`-`A16` debug payloads part of the normal v4 route unless explicitly requested.
+
+3. Review mobile route duplication.
+   - BAMTI and AIHub mobile v4/v6 routes are intentionally separate now.
+   - If maintenance cost grows, extract shared code while preserving route behavior.
+
+## Persistence
+
+1. Revisit database usage after inference behavior stabilizes.
+   - Define session/event persistence separately from raw frame handling.
+   - Avoid storing raw frames by default.
+
+2. Add migrations before production database changes.
    - Introduce Alembic or another explicit migration workflow.
-   - Stop relying on `Base.metadata.create_all` for environments beyond local MVP.
-
-4. Consider stronger JPEG validation.
-   - Decide whether to validate JPEG magic bytes before enqueueing.
-   - Keep any validation lightweight enough for the WebSocket hot path.
-
-## Model Runner Evolution
-
-1. Expand runner selection.
-   - Replace hardcoded `get_runner()` branching with a manifest-backed loader.
-   - Keep `MockRunner` as the default local runner.
-
-2. Add `PytorchRunner`.
-   - Keep it behind `InferenceRunner`.
-   - Do not change WebSocket or alert code for runner-specific details.
-
-3. Add `OnnxRunner`.
-   - Keep it behind `InferenceRunner`.
-   - Make it selectable by manifest/config once available.
 
 ## Deployment
 
-1. Harden Docker Compose for deployment.
-   - Add production environment documentation.
-   - Decide how frontend artifacts are produced and mounted into Nginx.
+1. Keep Nginx deployment notes aligned with production.
+   - Production Nginx is native, not part of the backend compose stack.
+   - `/api/` proxying must preserve WebSocket upgrade headers.
 
-2. Complete HTTPS setup.
-   - Add the operational steps or scripts for Let's Encrypt certificate issuance.
-   - Keep `/api/` and `/ws/` routing behavior unchanged.
-
-3. Extend GitHub Actions.
-   - The current workflow runs compile and tests.
-   - Add deployment only after target server, secrets, and release process are defined.
-
-## Observability And Operations
-
-1. Add structured logging.
-   - Log session start/end.
-   - Log runner selection.
-   - Log WebSocket disconnects and validation errors.
-
-2. Add health/readiness distinction.
-   - Keep `/api/health` lightweight.
-   - Add database readiness only if needed by deployment.
-
-3. Add configuration documentation.
-   - Document `APP_NAME`, `ENVIRONMENT`, `INFERENCE_RUNNER`, `FRAME_QUEUE_SIZE`,
-     `WEBSOCKET_IDLE_TIMEOUT_SECONDS`, `WEBSOCKET_DRAIN_TIMEOUT_SECONDS`,
-     `MAX_FRAME_BYTES`, and `DATABASE_URL`.
-
-## API And Contract Quality
-
-1. Add more WebSocket tests.
-   - Invalid JSON.
-   - Queue overflow behavior.
-
-2. Add API schemas as the HTTP surface grows.
-   - Keep schemas explicit and small.
-   - Avoid adding broad abstractions before more endpoints exist.
+2. Add deployment checklist.
+   - Verify model files.
+   - Verify `.env.cuda`.
+   - Verify `docker compose ... config`.
+   - Verify `/api/health`.
+   - Verify one v4 and one v6 inference path.

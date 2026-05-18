@@ -1,157 +1,169 @@
 # Architecture
 
-This document describes the current repository structure and implemented runtime
-shape of the DMS backend.
+This backend exposes FastAPI inference APIs for BAMTI DMS.
+
+The active architecture supports both HTTP frame upload and WebSocket stream inference. It also supports two model profiles: BAMTI 7-class and AIHub 3-class.
 
 ## Runtime Entry Point
 
 - `app/main.py` creates the FastAPI application.
-- HTTP routes are mounted under `/api`.
-- WebSocket routes are mounted under `/ws`.
+- `app/api/routes.py` mounts all API routers under `/api`.
+- `/api/health` remains unversioned.
+- Versioned inference APIs live under `/api/v*`.
+- AIHub inference APIs live under `/api/aihub/*`.
 
-Current route modules:
+## API Shape
 
-- `app/api/routes.py` includes HTTP route modules.
-- `app/api/health.py` implements `GET /api/health`.
-- `app/ws/inference.py` implements `GET /ws/inference`.
+```text
+GET /api/health
+
+POST /api/v1/inference/frame
+POST /api/v1/telemetry/runs
+GET  /api/v1/telemetry/runs
+
+WS   /api/v2/inference/stream
+WS   /api/v3/inference/stream
+
+POST /api/v4/inference/frame
+WS   /api/v4/inference/stream
+WS   /api/v4/debug/inference/stream
+
+WS   /api/v5/inference/stream
+
+POST /api/v6/inference/frame
+WS   /api/v6/inference/stream
+
+POST /api/aihub/v4/inference/frame
+WS   /api/aihub/v4/inference/stream
+POST /api/aihub/v6/inference/frame
+WS   /api/aihub/v6/inference/stream
+```
 
 ## Module Boundaries
 
-The code is split into four main application areas:
-
-- `app/ws`
-  - Owns the WebSocket endpoint and per-session queue handling.
-  - `inference.py` handles the WebSocket message flow.
-  - `manager.py` manages bounded queues for active sessions.
+- `app/api`
+  - Owns routing, request parsing, response formatting, and WebSocket protocol handling.
 - `app/inference`
-  - Owns inference schemas, runner interface, runner selection, and the mock runner.
-  - `runner.py` defines `InferenceRunner`.
-  - `mock_runner.py` implements `MockRunner`.
-  - `manifest.py` selects a runner by name.
-- `app/alerts`
-  - Owns alert evaluation.
-  - `engine.py` converts an `InferenceResult` into zero or more alerts.
+  - Owns model loading, preprocessing, runner selection, score mapping, score averaging, and telemetry.
+- `app/core`
+  - Owns environment-driven settings.
 - `app/storage`
-  - Owns database setup, SQLAlchemy models, schema initialization, and repositories.
-  - No raw frames or per-frame inference results are modeled for persistence.
+  - Keeps SQLAlchemy database models and repository code for later persistence work.
 
-## WebSocket Inference Flow
+## Inference Flow
 
-The implemented endpoint is:
+REST frame endpoints accept one JPEG frame using `multipart/form-data`.
+
+Expected form fields:
+
+- `frame`: uploaded JPEG file.
+- `frameId`: optional client frame id.
+- `clientSentAt`: optional client timestamp string.
+- `sessionId`: optional smoothing key for v6 frame endpoints.
+
+Processing steps:
+
+1. Validate `Content-Type` is `image/jpeg`.
+2. Read up to `MAX_FRAME_BYTES`.
+3. Reject empty or oversized frames.
+4. Select the model runner from `app/inference/manifest.py`.
+5. Decode JPEG bytes.
+6. Resize to `MODEL_INPUT_SIZE`.
+7. Normalize with ImageNet mean/std.
+8. Run the model.
+9. Convert logits using configured activation.
+10. Map raw model outputs into service detections.
+11. Apply v6 score averaging when the route requires it.
+12. Return detections, model metadata, and telemetry.
+
+## WebSocket Flow
+
+WebSocket stream endpoints use a latest-pending policy.
+
+The frontend sends a session start message, then alternates frame metadata and binary JPEG payloads. If a new frame arrives while inference is still processing, the backend keeps only the latest pending frame and drops older pending frames.
+
+This protects the server from unbounded queue growth while allowing the frontend to send at a fixed target FPS.
+
+## Model Runner
+
+Runner selection is handled by `app/inference/manifest.py`.
+
+Important runners:
+
+- `bamti-torch`: BAMTI 7-class model.
+- `bamti-torch-debug-raw`: BAMTI 7-class model with raw score debug output.
+- `aihub-torch`: AIHub 3-class model.
+
+Model loading is handled by `app/inference/model_loader.py`.
+
+The loader supports:
+
+- `timm` `vit_base_patch16_224` custom checkpoint for BAMTI 7-class.
+- `torchvision.models.vit_b_16` checkpoint for AIHub 3-class.
+
+The active model cache keeps one active loaded model. Switching model paths releases the previous cached model to reduce memory pressure.
+
+## Score Mapping
+
+BAMTI 7-class mapping is defined in `app/inference/class_mapping.py`.
+
+Raw classes:
 
 ```text
-GET /ws/inference
+A1, A2, ..., A16
 ```
 
-Implemented flow:
+Service detections:
 
-1. Client sends `session_start` JSON.
-2. Server creates a `driving_session` row, creates a session queue, starts a background result worker, and sends `session_started`.
-3. Client may send `ping`; server replies with `pong`.
-4. Client sends `frame_meta` JSON with `content_type` set to `image/jpeg`.
-5. Client sends a binary JPEG frame.
-6. Server validates the frame, queues it, runs the configured runner, evaluates alerts, and sends `inference_result`.
-7. Client sends `session_end` JSON or disconnects.
+| Variable | Raw classes |
+|---|---|
+| `normal_driving` | A1 |
+| `phone_use` | A5, A6, A7, A8, A9 |
+| `vehicle_device_operation` | A3, A4 |
+| `face_action` | A2, A13, A14, A16 |
+| `distraction` | A10, A11 |
+| `drowsiness` | A12 |
+| `rear_seat_interaction` | A15 |
 
-The WebSocket implementation uses one `asyncio.Queue` per session. Queue size is
-configured by `FRAME_QUEUE_SIZE` and defaults to `4`.
+Grouped service detections use max raw score.
 
-When a queue is full, `WebSocketSessionManager.put_latest()` removes one pending
-frame before enqueueing the newest frame. This favors low latency over processing
-every frame.
+## Score Smoothing
 
-The WebSocket endpoint also rejects empty frames, frames larger than
-`MAX_FRAME_BYTES`, and frame metadata whose `content_type` is not `image/jpeg`.
-If no frame or control message arrives before `WEBSOCKET_IDLE_TIMEOUT_SECONDS`,
-the server sends an `idle_timeout` error and closes the connection normally.
-On `session_end`, the endpoint waits up to `WEBSOCKET_DRAIN_TIMEOUT_SECONDS` for
-queued frames to finish, marks the `driving_session` ended, creates or updates
-`session_summary`, and then sends `session_ended`.
+v4 returns immediate model scores.
 
-If a client disconnects, idle timeout occurs, or queue drain timeout occurs while
-a session is open, the endpoint attempts to mark the `driving_session` ended and
-create or update `session_summary` during cleanup. The current database schema
-does not distinguish normal and abnormal close reasons; close reasons are logged.
+v6 applies a one-second rolling average using `app/inference/score_averaging.py`.
 
-The WebSocket contract is documented in `docs/websocket-contract.md`.
+Smoothing is keyed by session where available.
 
-## Inference
+## Telemetry Runs
 
-`InferenceRunner` is the current runner interface:
+`POST /api/v1/telemetry/runs` stores frontend one-minute performance measurement payloads as JSON files.
 
-```python
-async def infer(self, frame: bytes) -> InferenceResult
+Default path:
+
+```text
+backend/telemetry_runs/
 ```
 
-Current implemented runner:
-
-- `MockRunner`
-  - Ignores the frame bytes.
-  - Always returns an attentive result with high confidence.
-
-Runner selection is done by `get_runner()` in `app/inference/manifest.py`.
-Currently only the name `mock` is supported.
-
-## Alerts
-
-`AlertEngine.evaluate()` accepts an `InferenceResult` and returns a list of
-alerts.
-
-Current behavior:
-
-- If `is_distracted` is false, no alerts are returned.
-- If `is_distracted` is true, one `distraction_detected` warning alert is returned.
-
-The alert engine does not call model runners directly.
-
-## Storage
-
-Database settings are defined in `app/core/config.py`.
-
-The async SQLAlchemy engine and session factory live in `app/storage/database.py`.
-The schema can be created with:
-
-```bash
-python -m app.storage.init_db
-```
-
-Current SQLAlchemy models:
-
-- `DrivingSession`
-  - Table: `driving_session`
-  - Tracks session id, optional driver id, status, start/end timestamps, and audit timestamps.
-- `DistractionEvent`
-  - Table: `distraction_event`
-  - Tracks session-linked distraction events.
-- `SessionSummary`
-  - Table: `session_summary`
-  - Tracks one summary row per session.
-
-Current repositories:
-
-- `DrivingSessionRepository`
-- `DistractionEventRepository`
-- `SessionSummaryRepository`
-
-The WebSocket lifecycle writes `driving_session` and `session_summary` through a
-small helper in `app/ws/lifecycle.py`. Raw frames and per-frame inference results
-are not passed to persistence. `distraction_event` persistence is intentionally
-not wired yet.
+The directory is ignored by Git.
 
 ## Deployment Shape
 
-The repository includes:
+In production, Nginx runs natively and proxies `/api/` to FastAPI.
 
-- `Dockerfile` for the FastAPI API container.
-- `docker-compose.yml` with `api`, `mysql`, and `nginx` services.
-- `nginx/conf.d/dms.conf` for HTTP reverse proxy.
-- `nginx/conf.d/dms-https.conf.example` for HTTPS reverse proxy shape.
+```text
+public domain
+  |
+  v
+native Nginx
+  |-- /      -> frontend process/static serving
+  `-- /api/* -> FastAPI backend at 127.0.0.1:8000
+```
 
-Current Nginx HTTP routing:
+Docker Compose mounts the workspace model directory into the API container:
 
-- `/` serves static files from `/usr/share/nginx/html`.
-- `/api/` proxies to `api:8000/api/`.
-- `/ws/` proxies WebSocket traffic to `api:8000/ws/`.
-
-The Compose file mounts `./frontend-dist` as the Nginx static root, but this
-repository currently does not contain a frontend build.
+```text
+../model -> /models
+MODEL_PATH=/models/exp04_pseudo_ir_aug.pth
+AIHUB_MODEL_PATH=/models/final_model.pth
+```

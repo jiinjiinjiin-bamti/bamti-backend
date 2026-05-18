@@ -1,36 +1,31 @@
-from app.inference.mock_runner import MockRunner
+from app.core.config import settings
 from app.inference.runner import InferenceRunner
-from app.inference.schemas import DetectionClass, ModelManifest
+from app.inference.schemas import ModelManifest
 
 
-MOCK_MODEL_MANIFEST = ModelManifest(
-    model_version="mock-v1",
-    classes=(
-        DetectionClass(
-            variable_name="attentive",
-            class_id="attentive",
-            display_name="Attentive",
-            description="Normal attentive driving state.",
-            threshold=0.5,
-        ),
-        DetectionClass(
-            variable_name="distracted",
-            class_id="distracted",
-            display_name="Distracted",
-            description="Driver distraction state.",
-            threshold=0.5,
-        ),
-    ),
-)
+def get_runner(name: str = "bamti-torch") -> InferenceRunner:
+    if name in {"bamti-torch", "torch"}:
+        from app.inference.torch_runner import BamtiTorchRunner
 
+        return BamtiTorchRunner()
+    if name in {"bamti-torch-compiled", "torch-compiled"}:
+        from app.inference.torch_runner import BamtiTorchRunner
 
-def get_runner(name: str = "mock") -> InferenceRunner:
-    if name == "mock":
-        return MockRunner()
+        return BamtiTorchRunner(use_compiled_model=True)
+    if name in {"bamti-torch-debug-raw", "torch-debug-raw"}:
+        from app.inference.torch_runner import BamtiTorchRunner
+
+        return BamtiTorchRunner(include_debug_raw_detections=True)
+    if name in {"aihub-torch", "torch-aihub"}:
+        from app.inference.torch_runner import BamtiTorchRunner
+
+        return BamtiTorchRunner(model_path=settings.aihub_model_path)
+    if name in {"aihub-torch-compiled", "torch-aihub-compiled"}:
+        from app.inference.torch_runner import BamtiTorchRunner
+
+        return BamtiTorchRunner(use_compiled_model=True, model_path=settings.aihub_model_path)
     raise ValueError(f"Unsupported runner: {name}")
 
 
-def get_model_manifest(name: str = "mock") -> ModelManifest:
-    if name == "mock":
-        return MOCK_MODEL_MANIFEST
-    raise ValueError(f"Unsupported model manifest: {name}")
+def get_model_manifest(name: str = "bamti-torch") -> ModelManifest:
+    return get_runner(name).manifest()

@@ -1,159 +1,130 @@
 # Decisions
 
-This document records architecture and implementation decisions that are visible
-in the current codebase.
+This document records current backend architecture and implementation decisions.
 
-## Keep Runtime Modules Separate
+## Keep Versioned APIs
 
 Decision:
 
-- Keep WebSocket handling, inference, alerting, and storage in separate modules.
-
-Current implementation:
-
-- `app/ws`
-- `app/inference`
-- `app/alerts`
-- `app/storage`
+- Keep `/api/health` unversioned.
+- Keep inference variants under explicit version prefixes.
+- Use `/api/v*` for BAMTI 7-class.
+- Use `/api/aihub/v*` for AIHub 3-class.
 
 Reason:
 
-- The project needs to swap inference implementations later without entangling
-  WebSocket transport, alert rules, or persistence.
+- The frontend needs to select API behavior explicitly.
+- v4 and v6 have different score semantics.
+- AIHub should not be hidden behind the BAMTI model profile.
 
-## Use a Runner Interface
-
-Decision:
-
-- Model execution goes through `InferenceRunner`.
-
-Current implementation:
-
-- `app/inference/runner.py` defines the interface.
-- `app/inference/mock_runner.py` implements `MockRunner`.
-- `app/inference/manifest.py` exposes `get_runner()`.
-
-Current limit:
-
-- Only `mock` is supported.
-- There is no manifest file parser yet.
-
-## Start With MockRunner
+## Preserve v4 and v6 Semantics
 
 Decision:
 
-- Build the end-to-end backend flow first with `MockRunner`.
-
-Current implementation:
-
-- `MockRunner.infer()` ignores the input frame and returns an attentive result.
+- v4 returns immediate model score responses.
+- v6 returns one-second rolling average score responses.
 
 Reason:
 
-- This lets WebSocket behavior, queueing, alerts, tests, and container setup exist
-  before real model integration.
+- v4 is useful for realtime debugging and raw behavior checks.
+- v6 is more stable for threshold-based user-facing warnings.
 
-## Keep Alert Logic Separate From Model Logic
-
-Decision:
-
-- Runners return inference results.
-- `AlertEngine` converts results into alerts.
-
-Current implementation:
-
-- `app/ws/inference.py` calls the runner and then calls `AlertEngine`.
-- `AlertEngine` does not call runner code.
-
-## Do Not Persist Frames or Per-Frame Results
+## Add a Dedicated v4 Debug Stream
 
 Decision:
 
-- The database should not store raw frame bytes.
-- The database should not store per-frame inference results.
-
-Current implementation:
-
-- SQLAlchemy models only cover sessions, distraction events, and session summaries.
-- No table exists for frames or per-frame inference results.
-
-## Prefer Low Latency Over Processing Every Frame
-
-Decision:
-
-- Use a bounded queue per WebSocket session.
-- If the queue is full, drop an older pending frame and keep the newest one.
-
-Current implementation:
-
-- `WebSocketSessionManager.create_queue()` creates `asyncio.Queue(maxsize=N)`.
-- `WebSocketSessionManager.put_latest()` drops one queued frame when full.
+- Expose raw BAMTI `A1`-`A16` scores through `/api/v4/debug/inference/stream`.
 
 Reason:
 
-- For real-time driver monitoring, stale frames are less useful than recent frames.
+- The service UI uses grouped detections.
+- Model debugging sometimes requires raw class visibility.
+- Keeping this under a debug route prevents confusing it with normal production inference.
 
-## Validate Frames At The WebSocket Boundary
+## Keep Model Execution Behind Runner Selection
 
 Decision:
 
-- Reject empty frames, oversized frames, and frames whose declared content type is
-  not `image/jpeg` before enqueueing.
-- Keep JPEG byte-level validation out of the MVP.
+- Model execution goes through `InferenceRunner` and `app/inference/manifest.py`.
 
 Current implementation:
 
-- `FrameMeta.content_type` is validated from the client-provided metadata.
-- The binary frame is checked for non-empty bytes and `MAX_FRAME_BYTES`.
-- JPEG magic bytes are not validated yet.
+- `bamti-torch`
+- `bamti-torch-debug-raw`
+- `aihub-torch`
 
 Reason:
 
-- The MVP needs predictable transport behavior without adding image decoding or
-  heavier content inspection to the WebSocket endpoint.
+- Model profile differences should stay out of route handlers as much as possible.
+- Future runners can be added without changing every route.
 
-## Use FastAPI and Pydantic
-
-Decision:
-
-- Use FastAPI for HTTP and WebSocket endpoints.
-- Use Pydantic models for request/result structures where present.
-
-Current implementation:
-
-- `HealthResponse`, `SessionStartMessage`, `SessionEndMessage`, `FrameMeta`,
-  `InferenceResult`, `QueuedFrame`, and `Alert` are Pydantic models.
-
-## Use Async SQLAlchemy With MySQL
+## Use Max Score for Grouped BAMTI Classes
 
 Decision:
 
-- Use SQLAlchemy async engine with MySQL.
+- When several raw action classes map to one service class, use the maximum score.
 
-Current implementation:
+Reason:
 
-- `DATABASE_URL` defaults to an `asyncmy` MySQL URL.
-- `docker-compose.yml` runs `mysql:8.4`.
-- `app/storage/database.py` creates an async engine and session factory.
+- A grouped event should activate when any member raw class is strongly detected.
+- Averaging can hide high-confidence raw detections inside a group.
 
-Current limit:
-
-- The WebSocket flow does not yet persist sessions, events, or summaries.
-- Migrations are not implemented.
-
-## Use Nginx as Reverse Proxy
+## Keep Threshold Judgment on the Frontend
 
 Decision:
 
-- Expose one public domain and route by path.
+- Backend may provide threshold metadata.
+- Frontend performs final active/inactive threshold judgment based on user settings.
 
-Current implementation:
+Reason:
 
-- `/` serves frontend static files from the Nginx container.
-- `/api/` proxies to FastAPI HTTP routes.
-- `/ws/` proxies to FastAPI WebSocket routes.
+- The UI allows threshold changes.
+- Backend fallback thresholds must not block live score updates.
 
-Current limit:
+## Do Not Store Raw Frames
 
-- The repository does not include frontend files.
-- HTTPS config is an example, not an automated certificate setup.
+Decision:
+
+- Do not store raw frame bytes.
+- Do not store per-frame inference results by default.
+
+Reason:
+
+- The current goal is live inference and demo analysis, not dataset collection.
+- Avoiding raw-frame persistence reduces privacy and storage risk.
+
+## Keep One Active Model Cached
+
+Decision:
+
+- The model loader keeps one active loaded model cache.
+- Loading another model path clears the existing cache.
+
+Reason:
+
+- Running BAMTI and AIHub models in one process can otherwise consume unnecessary VRAM.
+- The current deployment target favors stability over simultaneous multi-model residency.
+
+## Keep JSON Telemetry Runs
+
+Decision:
+
+- Store one-minute measurement payloads as JSON files under `TELEMETRY_RUNS_DIR`.
+
+Reason:
+
+- Performance experiments are easy to inspect and compare.
+- Database persistence is not required for this measurement flow.
+
+## Native Nginx in Production
+
+Decision:
+
+- Production Nginx runs outside Docker.
+- Backend container/process listens on `127.0.0.1:8000`.
+- Nginx proxies `/api/` and preserves WebSocket upgrade headers.
+
+Reason:
+
+- This matches the current deployment server setup.
+- The backend repo should not assume Nginx is part of the Docker deployment.

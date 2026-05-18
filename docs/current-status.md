@@ -1,72 +1,104 @@
 # Current Status
 
-This document captures the implementation state of the repository as it exists
-now. It is meant to help future Codex sessions quickly recover project context.
+This document captures the current backend implementation state.
 
 ## Implemented
 
-- FastAPI application skeleton exists in `app/main.py`.
-- HTTP router is mounted under `/api`.
-- WebSocket router is mounted under `/ws`.
-- `GET /api/health` is implemented.
-- `GET /api/v1/detection-classes` is implemented as a REST model manifest
-  compatibility endpoint.
-- `POST /api/v1/inference/frame` is implemented as a REST compatibility/debug
-  endpoint backed by `MockRunner`.
-- `POST /api/v1/telemetry/runs` is implemented as an accepted-only REST
-  compatibility endpoint.
-- `GET /ws/inference` is implemented.
-- WebSocket flow supports:
-  - `session_start`
-  - `driving_session` creation on `session_start`
-  - `session_started`
-  - app-level `ping` / `pong`
-  - `frame_meta`
-  - binary JPEG frame
-  - frame validation for content type, empty frames, and oversized frames
-  - `inference_result`
-  - `session_end`
-  - `session_ended`
-  - `driving_session` end cleanup on `session_end`, disconnect, idle timeout,
-    and queue drain timeout
-  - `session_summary` creation on session cleanup
-  - idle timeout
-  - disconnect cleanup
-- A per-session bounded `asyncio.Queue` is used.
-- Queue overflow drops an older pending frame before enqueueing the newest frame.
-- `session_end` waits briefly for queued frames to finish, bounded by
-  `WEBSOCKET_DRAIN_TIMEOUT_SECONDS`.
-- `InferenceRunner` interface exists.
-- `MockRunner` exists and is the only working runner.
-- `get_runner()` selects the mock runner when `INFERENCE_RUNNER=mock`.
-- `AlertEngine` exists and is separate from inference runners.
-- SQLAlchemy async database setup exists.
-- SQLAlchemy models exist for:
-  - `driving_session`
-  - `distraction_event`
-  - `session_summary`
-- Repository classes exist for sessions, events, and summaries.
-- WebSocket lifecycle persistence is isolated in `app/ws/lifecycle.py`.
-- REST compatibility inference does not create `driving_session`,
-  `session_summary`, or `distraction_event` rows.
-- Local development CORS is enabled only for:
-  - `http://localhost:5173`
-  - `http://127.0.0.1:5173`
-  - `http://localhost:3000`
-- Dockerfile exists.
-- Docker Compose defines `api`, `mysql`, and `nginx`.
-- Nginx config proxies `/api/` and `/ws/`.
-- HTTPS Nginx example config exists.
-- README contains local, Docker, test, WebSocket, and HTTPS notes.
-- GitHub Actions CI workflow exists.
-- Pytest coverage exists for health, mock runner, alert engine, normal WebSocket flow,
-  invalid WebSocket frames, and `session_end`.
-- `scripts/ws_smoke_test.py` exists for optional Docker Compose MySQL verification
-  of WebSocket session persistence.
+- FastAPI application entrypoint in `app/main.py`.
+- Router mounting under `/api`.
+- `GET /api/health`.
+- v1 REST frame inference and telemetry run persistence.
+- v2/v3 WebSocket inference experiments.
+- v4 REST and WebSocket inference.
+- v4 raw score debug WebSocket stream.
+- v5 WebSocket torch compile experiment.
+- v6 REST and WebSocket inference with one-second score averaging.
+- AIHub 3-class REST and WebSocket routes.
+- AIHub v4 and v6 route prefixes.
+- Mobile session routes for BAMTI and AIHub variants.
+- Real PyTorch runner selected through `app/inference/manifest.py`.
+- `timm` custom ViT-B/16 checkpoint support for BAMTI 7-class.
+- `torchvision` ViT-B/16 checkpoint support for AIHub 3-class.
+- JPEG bytes to RGB tensor preprocessing.
+- ImageNet mean/std normalization.
+- Softmax/sigmoid score activation selection through `MODEL_SCORE_ACTIVATION`.
+- BAMTI raw `A1`-`A16` to service detection mapping.
+- Max-score aggregation for grouped BAMTI service classes.
+- Per-frame telemetry:
+  - `processingFps`
+  - `preprocessMs`
+  - `inferenceMs`
+  - `postprocessMs`
+  - `serverTotalMs`
+- One-minute performance telemetry JSON file persistence under `TELEMETRY_RUNS_DIR`.
+- CPU Docker configuration.
+- CUDA Docker configuration.
+- Tests for health, inference contracts, WebSocket behavior, AIHub routes, model cache, and service score mapping.
 
-## Verified Locally
+## Current API Surface
 
-The following commands should be run after WebSocket contract changes:
+```text
+GET  /api/health
+
+GET  /api/v1/detection-classes
+POST /api/v1/inference/frame
+POST /api/v1/telemetry/runs
+GET  /api/v1/telemetry/runs
+
+WS   /api/v2/inference/stream
+WS   /api/v3/inference/stream
+
+GET  /api/v4/detection-classes
+POST /api/v4/inference/frame
+WS   /api/v4/inference/stream
+WS   /api/v4/debug/inference/stream
+
+WS   /api/v5/inference/stream
+
+GET  /api/v6/detection-classes
+POST /api/v6/inference/frame
+WS   /api/v6/inference/stream
+
+GET  /api/aihub/detection-classes
+POST /api/aihub/inference/frame
+WS   /api/aihub/inference/stream
+
+GET  /api/aihub/v4/detection-classes
+POST /api/aihub/v4/inference/frame
+WS   /api/aihub/v4/inference/stream
+
+GET  /api/aihub/v6/detection-classes
+POST /api/aihub/v6/inference/frame
+WS   /api/aihub/v6/inference/stream
+```
+
+## Important Files
+
+- `app/main.py`: FastAPI app creation and router mounting.
+- `app/api/routes.py`: root API router.
+- `app/api/v4/`: BAMTI v4 REST, WebSocket, debug stream, mobile routes.
+- `app/api/v6/`: BAMTI v6 REST, WebSocket, mobile routes.
+- `app/api/aihub/`: AIHub 3-class routes.
+- `app/inference/class_mapping.py`: BAMTI 7-class service mapping.
+- `app/inference/manifest.py`: runner and model manifest selection.
+- `app/inference/model_loader.py`: checkpoint loading and active model cache.
+- `app/inference/preprocessing.py`: JPEG preprocessing.
+- `app/inference/score_averaging.py`: v6 rolling score averaging.
+- `app/inference/telemetry.py`: processing FPS and latency metrics.
+- `app/inference/torch_runner.py`: real PyTorch inference runner.
+- `docker-compose.yml`: base Docker Compose.
+- `docker-compose.cuda.yml`: CUDA override.
+- `Dockerfile.cuda`: CUDA image.
+
+## Not Implemented
+
+- Authentication and authorization are not present.
+- Alembic migrations are not present.
+- ONNX Runtime runner is not implemented.
+- Deployment from GitHub Actions is not implemented.
+- Runtime database persistence for detected events is not connected.
+
+## Verification Commands
 
 ```bash
 python -m compileall app
@@ -74,73 +106,16 @@ python -m pytest
 docker compose config
 ```
 
-Optional MySQL-backed WebSocket persistence smoke test:
+CUDA compose config:
 
 ```bash
-docker compose up --build
-docker compose exec api python -m app.storage.init_db
-docker compose exec api python scripts/ws_smoke_test.py
+docker compose --env-file .env.cuda -f docker-compose.yml -f docker-compose.cuda.yml config
 ```
-
-## Not Implemented
-
-- `PytorchRunner` is not implemented.
-- `OnnxRunner` is not implemented.
-- Model manifest loading from a file is not implemented.
-- `distraction_event` writes are not integrated into the WebSocket inference flow.
-- Alembic migrations are not present.
-- Authentication and authorization are not present.
-- A frontend is not included in this repository.
-- Actual Let's Encrypt certificate issuance automation is not included.
-- Deployment to a server from GitHub Actions is not implemented.
-- Raw frame storage is not implemented, by design.
-- Per-frame inference result storage is not implemented, by design.
-
-## Important Files
-
-- `AGENTS.md`: project rules for future agent sessions.
-- `docs/websocket-contract.md`: current WebSocket contract.
-- `app/main.py`: FastAPI app creation and router mounting.
-- `app/api/v1.py`: REST compatibility endpoints for detection classes,
-  single-frame debug inference, and accepted-only telemetry run submission.
-- `app/ws/inference.py`: WebSocket inference endpoint.
-- `app/ws/lifecycle.py`: WebSocket session persistence helper.
-- `app/ws/manager.py`: per-session queue management.
-- `app/inference/runner.py`: runner interface.
-- `app/inference/mock_runner.py`: MVP runner.
-- `app/inference/manifest.py`: runner selection.
-- `app/inference/adapter.py`: converts runner output into REST detection scores.
-- `app/alerts/engine.py`: alert logic.
-- `app/storage/models.py`: SQLAlchemy models.
-- `app/storage/repositories.py`: repository classes.
-- `docker-compose.yml`: local container composition.
-- `nginx/conf.d/dms.conf`: HTTP reverse proxy config.
-- `.github/workflows/ci.yml`: CI workflow.
 
 ## Known Caveats
 
-- WebSocket JSON parsing and transport-level validation are implemented inside the endpoint.
-- The final real-time inference path remains WebSocket `GET /ws/inference`.
-  REST `POST /api/v1/inference/frame` is for frontend compatibility and debug
-  only, and is not the real-time standard path.
-- REST endpoint roles:
-  - `GET /api/v1/detection-classes` exposes the current model class manifest and
-    can remain useful after real model integration.
-  - `POST /api/v1/inference/frame` accepts one JPEG frame, runs `MockRunner`,
-    and returns detection scores without persistence.
-  - `POST /api/v1/telemetry/runs` returns `accepted` and currently does not
-    persist telemetry payloads.
-- WebSocket `GET /ws/inference` owns real-time frame streaming,
-  `inference_result` messages, session lifecycle, and ping/pong.
-- Production deployment should prefer the Nginx same-origin shape where `/api/*`
-  and `/ws/*` are served from the public domain. The CORS allowance is for local
-  frontend dev-server integration only.
-- Frame content type validation currently trusts the client-provided
-  `frame_meta.content_type`; JPEG magic bytes are not validated yet.
-- The database schema records only `active` or `ended` session status. Normal
-  `session_end`, client disconnect, idle timeout, and queue drain timeout are
-  distinguishable in logs but not in persisted session rows.
-- `app/storage/init_db.py` uses `Base.metadata.create_all`; there is no migration
-  history yet.
-- The repository folder was not initialized as a Git repository during the previous
-  session.
+- Docker model paths must be container paths such as `/models/exp04_pseudo_ir_aug.pth`.
+- Missing model files fail at model load time with `FileNotFoundError`.
+- The active model cache keeps one loaded model at a time. Alternating between BAMTI and AIHub profiles reloads models.
+- WebSocket latest-pending streams may report dropped pending frames when the client sends faster than inference can complete.
+- REST frame endpoints validate content type and size, then rely on PIL decode during preprocessing.

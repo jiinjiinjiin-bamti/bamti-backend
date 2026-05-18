@@ -1,96 +1,143 @@
 # Architecture
 
-This backend currently exposes a versioned HTTP API for frontend integration.
-WebSocket inference is intentionally deferred.
+This backend exposes FastAPI inference APIs for BAMTI DMS.
+
+The active architecture supports both HTTP frame upload and WebSocket stream inference. It also supports two model profiles: BAMTI 7-class and AIHub 3-class.
 
 ## Runtime Entry Point
 
 - `app/main.py` creates the FastAPI application.
-- HTTP routes are mounted under `/api`.
-- `app/api/routes.py` includes `GET /api/health` and the versioned v1 router.
-- `app/api/v1/routes.py` mounts v1 inference and telemetry endpoints.
+- `app/api/routes.py` mounts all API routers under `/api`.
+- `/api/health` remains unversioned.
+- Versioned inference APIs live under `/api/v*`.
+- AIHub inference APIs live under `/api/aihub/*`.
 
 ## API Shape
 
 ```text
-GET  /api/health
-GET  /api/v1/detection-classes
+GET /api/health
+
 POST /api/v1/inference/frame
 POST /api/v1/telemetry/runs
 GET  /api/v1/telemetry/runs
-```
 
-`/api/health` is not versioned because it describes the API process itself.
-Model inference and performance telemetry are versioned under `/api/v1`.
+WS   /api/v2/inference/stream
+WS   /api/v3/inference/stream
+
+POST /api/v4/inference/frame
+WS   /api/v4/inference/stream
+WS   /api/v4/debug/inference/stream
+
+WS   /api/v5/inference/stream
+
+POST /api/v6/inference/frame
+WS   /api/v6/inference/stream
+
+POST /api/aihub/v4/inference/frame
+WS   /api/aihub/v4/inference/stream
+POST /api/aihub/v6/inference/frame
+WS   /api/aihub/v6/inference/stream
+```
 
 ## Module Boundaries
 
 - `app/api`
-  - Owns HTTP routing and request/response schemas.
+  - Owns routing, request parsing, response formatting, and WebSocket protocol handling.
 - `app/inference`
-  - Owns model loading, preprocessing, runner selection, inference execution, and
-    per-frame telemetry.
-- `app/storage`
-  - Keeps SQLAlchemy database models and repository code for later persistence
-    work. The current v1 inference endpoint does not write frame results to the
-    database.
+  - Owns model loading, preprocessing, runner selection, score mapping, score averaging, and telemetry.
 - `app/core`
   - Owns environment-driven settings.
+- `app/storage`
+  - Keeps SQLAlchemy database models and repository code for later persistence work.
 
 ## Inference Flow
 
-`POST /api/v1/inference/frame` accepts one JPEG frame using
-`multipart/form-data`.
+REST frame endpoints accept one JPEG frame using `multipart/form-data`.
 
 Expected form fields:
 
 - `frame`: uploaded JPEG file.
 - `frameId`: optional client frame id.
 - `clientSentAt`: optional client timestamp string.
+- `sessionId`: optional smoothing key for v6 frame endpoints.
 
 Processing steps:
 
 1. Validate `Content-Type` is `image/jpeg`.
 2. Read up to `MAX_FRAME_BYTES`.
 3. Reject empty or oversized frames.
-4. Run the configured `InferenceRunner`.
-5. Decode JPEG bytes and resize to `MODEL_INPUT_SIZE`.
-6. Normalize with ImageNet mean/std.
-7. Run the ViT-B/16 model checkpoint.
-8. Convert logits with `softmax` or `sigmoid`.
-9. Return class scores and telemetry.
+4. Select the model runner from `app/inference/manifest.py`.
+5. Decode JPEG bytes.
+6. Resize to `MODEL_INPUT_SIZE`.
+7. Normalize with ImageNet mean/std.
+8. Run the model.
+9. Convert logits using configured activation.
+10. Map raw model outputs into service detections.
+11. Apply v6 score averaging when the route requires it.
+12. Return detections, model metadata, and telemetry.
 
-Response fields include:
+## WebSocket Flow
 
-- `frameId`
-- `clientSentAt`
-- `serverReceivedAt`
-- `serverRespondedAt`
-- `detections`
-- `model`
-- `telemetry`
+WebSocket stream endpoints use a latest-pending policy.
+
+The frontend sends a session start message, then alternates frame metadata and binary JPEG payloads. If a new frame arrives while inference is still processing, the backend keeps only the latest pending frame and drops older pending frames.
+
+This protects the server from unbounded queue growth while allowing the frontend to send at a fixed target FPS.
 
 ## Model Runner
 
-The active runner is `BamtiTorchRunner`.
+Runner selection is handled by `app/inference/manifest.py`.
 
-Runner selection:
+Important runners:
+
+- `bamti-torch`: BAMTI 7-class model.
+- `bamti-torch-debug-raw`: BAMTI 7-class model with raw score debug output.
+- `aihub-torch`: AIHub 3-class model.
+
+Model loading is handled by `app/inference/model_loader.py`.
+
+The loader supports:
+
+- `timm` `vit_base_patch16_224` custom checkpoint for BAMTI 7-class.
+- `torchvision.models.vit_b_16` checkpoint for AIHub 3-class.
+
+The active model cache keeps one active loaded model. Switching model paths releases the previous cached model to reduce memory pressure.
+
+## Score Mapping
+
+BAMTI 7-class mapping is defined in `app/inference/class_mapping.py`.
+
+Raw classes:
 
 ```text
-INFERENCE_RUNNER=bamti-torch
+A1, A2, ..., A16
 ```
 
-The runner loads `MODEL_PATH`, expects a checkpoint with `model_state_dict` and
-`class_names`, and builds a `torchvision.models.vit_b_16` model with the number
-of checkpoint classes.
+Service detections:
 
-The current model classes are read from the checkpoint and surfaced through
-`GET /api/v1/detection-classes`.
+| Variable | Raw classes |
+|---|---|
+| `normal_driving` | A1 |
+| `phone_use` | A5, A6, A7, A8, A9 |
+| `vehicle_device_operation` | A3, A4 |
+| `face_action` | A2, A13, A14, A16 |
+| `distraction` | A10, A11 |
+| `drowsiness` | A12 |
+| `rear_seat_interaction` | A15 |
+
+Grouped service detections use max raw score.
+
+## Score Smoothing
+
+v4 returns immediate model scores.
+
+v6 applies a one-second rolling average using `app/inference/score_averaging.py`.
+
+Smoothing is keyed by session where available.
 
 ## Telemetry Runs
 
-`POST /api/v1/telemetry/runs` stores the frontend's one-minute performance
-measurement payload as a JSON file.
+`POST /api/v1/telemetry/runs` stores frontend one-minute performance measurement payloads as JSON files.
 
 Default path:
 
@@ -98,28 +145,25 @@ Default path:
 backend/telemetry_runs/
 ```
 
-The directory is ignored by Git. The matching `GET /api/v1/telemetry/runs`
-endpoint lists saved JSON files.
+The directory is ignored by Git.
 
 ## Deployment Shape
 
-Nginx serves frontend static files and proxies only API requests:
+In production, Nginx runs natively and proxies `/api/` to FastAPI.
 
 ```text
 public domain
   |
   v
-Nginx
-  |-- /      -> frontend static files
-  `-- /api/* -> FastAPI HTTP
+native Nginx
+  |-- /      -> frontend process/static serving
+  `-- /api/* -> FastAPI backend at 127.0.0.1:8000
 ```
 
 Docker Compose mounts the workspace model directory into the API container:
 
 ```text
 ../model -> /models
-MODEL_PATH=/models/final_model.pth
+MODEL_PATH=/models/exp04_pseudo_ir_aug.pth
+AIHUB_MODEL_PATH=/models/final_model.pth
 ```
-
-The MySQL service is available behind the `persistence` Compose profile. It is
-not required for the active v1 HTTP inference flow.

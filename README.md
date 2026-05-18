@@ -1,86 +1,187 @@
 # DMS Backend
 
-Driver Monitoring System(DMS) 백엔드입니다.
+Driver Monitoring System backend for BAMTI.
 
-현재 백엔드는 프론트엔드 연동을 위해 HTTP 기반 `/api/v1` 추론 API를
-제공합니다. WebSocket은 아직 활성 구현 범위가 아니며, 실제 모델 연동과
-1분 성능 측정 기록을 먼저 안정화합니다.
+The backend exposes FastAPI endpoints for real model inference. It supports both the current BAMTI 7-class model profile and the restored AIHub 3-class profile.
 
-## 현재 API
+## Current Capabilities
+
+- Health check API
+- REST single-frame inference
+- WebSocket latest-pending inference
+- BAMTI 7-class model inference
+- AIHub 3-class model inference
+- v4 realtime score responses
+- v6 one-second rolling average score responses
+- v4 raw score debug stream
+- One-minute telemetry JSON persistence
+- CPU Docker execution
+- CUDA Docker execution
+
+## API Surface
+
+All routes are mounted under `/api`.
+
+### Common
 
 ```text
-GET  /api/health
+GET /api/health
+```
+
+### BAMTI 7-class
+
+```text
 GET  /api/v1/detection-classes
 POST /api/v1/inference/frame
 POST /api/v1/telemetry/runs
 GET  /api/v1/telemetry/runs
+
+WS   /api/v2/inference/stream
+WS   /api/v3/inference/stream
+
+GET  /api/v4/detection-classes
+POST /api/v4/inference/frame
+WS   /api/v4/inference/stream
+WS   /api/v4/debug/inference/stream
+
+WS   /api/v5/inference/stream
+
+GET  /api/v6/detection-classes
+POST /api/v6/inference/frame
+WS   /api/v6/inference/stream
 ```
 
-## 주요 구조
+### AIHub 3-class
+
+```text
+GET  /api/aihub/detection-classes
+POST /api/aihub/inference/frame
+WS   /api/aihub/inference/stream
+
+GET  /api/aihub/v4/detection-classes
+POST /api/aihub/v4/inference/frame
+WS   /api/aihub/v4/inference/stream
+
+GET  /api/aihub/v6/detection-classes
+POST /api/aihub/v6/inference/frame
+WS   /api/aihub/v6/inference/stream
+```
+
+## API Version Behavior
+
+v4:
+
+- Returns model score responses immediately.
+- Used for realtime score checks and debugging.
+
+v6:
+
+- Aggregates detection scores in a one-second rolling window.
+- Returns averaged scores per session.
+- Intended for more stable threshold-based UI updates.
+
+v4 debug:
+
+- `WS /api/v4/debug/inference/stream`
+- Exposes raw BAMTI `A1`-`A16` scores for debugging.
+- Not intended as the default production route.
+
+## Project Structure
 
 ```text
 app/
 |-- api/
 |   |-- health.py
 |   |-- routes.py
-|   `-- v1/
-|       |-- inference.py
-|       |-- routes.py
-|       |-- schemas.py
-|       `-- telemetry.py
+|   |-- v1/
+|   |-- v2/
+|   |-- v3/
+|   |-- v4/
+|   |-- v5/
+|   |-- v6/
+|   `-- aihub/
 |-- core/
 |   `-- config.py
 |-- inference/
+|   |-- class_mapping.py
 |   |-- manifest.py
 |   |-- model_loader.py
 |   |-- preprocessing.py
 |   |-- runner.py
 |   |-- schemas.py
+|   |-- score_averaging.py
 |   |-- telemetry.py
 |   `-- torch_runner.py
 `-- storage/
 ```
 
-## 모델 연동
+## Model Profiles
 
-기본 runner는 실제 PyTorch 모델을 사용하는 `bamti-torch`입니다.
+### BAMTI 7-class
 
-기본 모델 경로:
+The current BAMTI model uses a custom `timm` ViT-B/16 checkpoint and emits raw action classes `A1` through `A16`.
 
-```text
-../model/final_model.pth
+Service-level mapping:
+
+| Variable | Display | Raw classes |
+|---|---|---|
+| `normal_driving` | 정상 주행 | A1 |
+| `phone_use` | 휴대기기 조작 | A5, A6, A7, A8, A9 |
+| `vehicle_device_operation` | 차량 장치 조작 | A3, A4 |
+| `face_action` | 얼굴 행동 | A2, A13, A14, A16 |
+| `distraction` | 주의 분산 | A10, A11 |
+| `drowsiness` | 졸음 | A12 |
+| `rear_seat_interaction` | 뒷좌석 상호작용 | A15 |
+
+When multiple raw classes map to one service class, the backend uses the maximum raw score.
+
+### AIHub 3-class
+
+The AIHub profile uses the legacy model and the following service classes:
+
+| Variable | Display |
+|---|---|
+| `forward_inattention` | 전방 주의 소홀 |
+| `surrounding_inattention` | 주변 주의 소홀 |
+| `vehicle_interaction` | 차량 간 상호작용 |
+
+## Preprocessing
+
+Frames are expected as JPEG images.
+
+The backend preprocessing is:
+
+```python
+Image.open(...).convert("RGB")
+Resize((224, 224))
+ToTensor()
+Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ```
 
-checkpoint는 다음 값을 포함해야 합니다.
+This matches the ImageNet mean/std transform used during training.
 
-- `model_state_dict`
-- `class_names`
-
-현재 프론트엔드는 checkpoint의 class name을 기준으로 다음 클래스들을 기대합니다.
-
-- `forward_inattention`
-- `surrounding_inattention`
-- `vehicle_interaction`
-
-## 환경 변수
+## Environment Variables
 
 ```text
 APP_NAME="DMS Backend"
 ENVIRONMENT=local
 INFERENCE_RUNNER=bamti-torch
-MODEL_PATH=../model/final_model.pth
+MODEL_PATH=/models/exp04_pseudo_ir_aug.pth
+AIHUB_MODEL_PATH=/models/final_model.pth
 MODEL_DEVICE=cpu
 MODEL_INPUT_SIZE=224
 MODEL_SCORE_ACTIVATION=softmax
+TORCH_NUM_THREADS=5
+TORCH_COMPILE_BACKEND=inductor
+TORCH_COMPILE_MODE=reduce-overhead
 TELEMETRY_RUNS_DIR=./telemetry_runs
 MAX_FRAME_BYTES=1048576
-DATABASE_URL=mysql+aiomysql://dms_user:dms_password@mysql:3306/dms
+DATABASE_URL=mysql+aiomysql://dms_user:change-me@mysql:3306/dms
 ```
 
-`MODEL_DEVICE`는 사용 가능한 환경에 따라 `cpu`, `mps`, `cuda`를 사용할 수 있습니다.
-요청한 device가 사용할 수 없으면 runner는 CPU로 fallback합니다.
+`MODEL_DEVICE` can be `cpu`, `mps`, or `cuda`. If the requested device is not available, the runner falls back to CPU.
 
-## 로컬 실행
+## Local Run
 
 ```bash
 python -m venv .venv
@@ -95,48 +196,54 @@ Health check:
 curl http://127.0.0.1:8000/api/health
 ```
 
-모델 클래스 확인:
+Detection classes:
 
 ```bash
-curl http://127.0.0.1:8000/api/v1/detection-classes
+curl http://127.0.0.1:8000/api/v4/detection-classes
+curl http://127.0.0.1:8000/api/aihub/v4/detection-classes
 ```
 
 ## Docker Compose
 
-```bash
-docker compose up --build
-```
-
-Compose는 workspace의 `../model` 디렉터리를 API 컨테이너의 `/models`로
-마운트하고, 기본 `MODEL_PATH`를 `/models/final_model.pth`로 설정합니다.
-
-Nginx는 `/api/` 요청만 FastAPI로 proxy합니다.
-
-MySQL은 현재 v1 HTTP 추론 경로에서 사용하지 않으므로 기본 Compose 실행에는
-포함하지 않습니다. 나중에 persistence 검증이 필요하면 profile로 실행합니다.
+CPU:
 
 ```bash
-docker compose --profile persistence up --build
+docker compose --env-file .env -f docker-compose.yml up -d --build
 ```
 
-## 1분 성능 측정 기록
+CUDA:
 
-프론트엔드는 1분 성능 측정 종료 시 다음 API로 payload를 보냅니다.
+```bash
+docker compose --env-file .env.cuda -f docker-compose.yml -f docker-compose.cuda.yml up -d --build
+```
+
+Compose mounts the workspace model directory into the API container at `/models`. Model paths must be container paths, not host paths.
+
+Recommended CUDA model paths:
+
+```env
+MODEL_PATH=/models/exp04_pseudo_ir_aug.pth
+AIHUB_MODEL_PATH=/models/final_model.pth
+MODEL_DEVICE=cuda
+```
+
+## Telemetry Runs
+
+The frontend can save one-minute performance measurement payloads through:
 
 ```text
 POST /api/v1/telemetry/runs
 ```
 
-백엔드는 payload를 `TELEMETRY_RUNS_DIR` 아래 JSON 파일로 저장합니다.
-기본 디렉터리인 `telemetry_runs/`는 Git에 포함하지 않습니다.
+Saved files are written under `TELEMETRY_RUNS_DIR`, which is ignored by Git.
 
-저장된 파일 목록은 다음 API로 조회합니다.
+List saved runs:
 
 ```text
 GET /api/v1/telemetry/runs
 ```
 
-## 검증
+## Verification
 
 ```bash
 python -m compileall app
@@ -144,9 +251,9 @@ python -m pytest
 docker compose config
 ```
 
-## 문서
+## Documentation
 
-- [`docs/architecture.md`](docs/architecture.md): 현재 HTTP v1 중심 구조
-- [`docs/current-status.md`](docs/current-status.md): 구현 현황
-- [`docs/decisions.md`](docs/decisions.md): 설계 결정
-- [`docs/roadmap.md`](docs/roadmap.md): 다음 작업
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/current-status.md`](docs/current-status.md)
+- [`docs/decisions.md`](docs/decisions.md)
+- [`docs/roadmap.md`](docs/roadmap.md)

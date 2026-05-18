@@ -1,65 +1,75 @@
 # Roadmap
 
-Items here are planned work and are not implemented unless also listed in
-`docs/current-status.md`.
+Items here are planned or potential work. Implemented work is tracked in `docs/current-status.md`.
 
 ## Near Term
 
-1. Verify frontend integration against the real v1 HTTP model API.
-   - Confirm `/api/v1/detection-classes` returns the three checkpoint classes.
-   - Confirm `/api/v1/inference/frame` drives Detection Status from model output.
-   - Confirm 1-minute measurement JSON files are written through
-     `/api/v1/telemetry/runs`.
+1. Stabilize deployment model paths.
+   - Keep `.env.cuda` using container paths.
+   - Confirm `/models/exp04_pseudo_ir_aug.pth` and `/models/final_model.pth` are mounted before startup.
 
-2. Add model startup diagnostics.
-   - Surface model path, device, class names, and load status in a lightweight
-     status endpoint if needed.
+2. Improve startup diagnostics.
+   - Add an optional model status endpoint if needed.
+   - Surface selected device, model path, loaded architecture, and class count.
    - Keep `/api/health` lightweight.
 
 3. Improve frame validation.
-   - Add JPEG magic-byte validation or decode-time error handling.
-   - Keep validation cheap enough for repeated HTTP frame uploads.
+   - Add cheap JPEG magic-byte validation or clearer decode errors.
+   - Keep validation cheap enough for repeated frame uploads.
 
-4. Add persisted performance-run retrieval.
-   - `GET /api/v1/telemetry/runs` currently lists files.
-   - Add a detail endpoint only if the frontend needs to load historical JSON.
+4. Measure v4 vs v6 behavior.
+   - Compare immediate scores against one-second rolling average scores.
+   - Confirm threshold behavior in the frontend for both BAMTI and AIHub profiles.
 
-## Model Runner Evolution
+## Model Runtime
 
 1. Measure CPU, MPS, and CUDA behavior.
    - Compare `MODEL_DEVICE=cpu`, `mps`, and `cuda` where available.
    - Record results through the one-minute measurement flow.
 
-2. Add ONNX Runtime runner if needed.
-   - Keep it behind `InferenceRunner`.
-   - Do not change the v1 route contract for runner-specific details.
+2. Revisit model cache policy if simultaneous users require different profiles.
+   - Current behavior keeps one active loaded model.
+   - If concurrent BAMTI and AIHub usage becomes common, consider a bounded multi-model cache or separate backend processes.
 
-3. Add runner warmup if cold-start latency becomes visible.
+3. Add runner warmup if cold-start latency remains visible.
+   - Warmup must not block health check.
+   - Warmup should target the selected model profile.
+
+4. Add ONNX Runtime runner only if needed.
+   - Keep it behind `InferenceRunner`.
+   - Do not change route contracts for runner-specific details.
+
+## API Cleanup
+
+1. Decide whether v2/v3/v5 experimental WebSocket routes should remain public.
+   - v4 and v6 are the active frontend-facing paths.
+   - Older experimental versions can stay during comparison but should be documented as non-primary.
+
+2. Keep v4 debug isolated.
+   - Do not make raw `A1`-`A16` debug payloads part of the normal v4 route unless explicitly requested.
+
+3. Review mobile route duplication.
+   - BAMTI and AIHub mobile v4/v6 routes are intentionally separate now.
+   - If maintenance cost grows, extract shared code while preserving route behavior.
 
 ## Persistence
 
-1. Revisit database usage after inference integration stabilizes.
+1. Revisit database usage after inference behavior stabilizes.
    - Define session/event persistence separately from raw frame handling.
    - Avoid storing raw frames by default.
 
-2. Add migrations.
-   - Introduce Alembic or another explicit migration workflow before production
-     database changes.
-
-## Transport
-
-1. Reintroduce WebSocket only after HTTP v1 baseline measurements are complete.
-   - Treat it as a separate design step.
-   - Preserve the ability to compare HTTP and WebSocket results using the same
-     one-minute telemetry payload shape.
+2. Add migrations before production database changes.
+   - Introduce Alembic or another explicit migration workflow.
 
 ## Deployment
 
-1. Harden Docker Compose for the actual model.
-   - Document model volume mounting.
-   - Confirm the container has the required torch/torchvision runtime.
+1. Keep Nginx deployment notes aligned with production.
+   - Production Nginx is native, not part of the backend compose stack.
+   - `/api/` proxying must preserve WebSocket upgrade headers.
 
-2. Complete HTTPS setup.
-   - Keep `/api/` routing stable.
-   - Add certificate automation only after the target deployment environment is
-     fixed.
+2. Add deployment checklist.
+   - Verify model files.
+   - Verify `.env.cuda`.
+   - Verify `docker compose ... config`.
+   - Verify `/api/health`.
+   - Verify one v4 and one v6 inference path.

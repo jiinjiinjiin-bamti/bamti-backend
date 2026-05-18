@@ -2,31 +2,53 @@
 
 ## Project Direction
 
-This repository is the backend for a Driver Monitoring System (DMS).
-Build the project in small, reviewable steps:
+This repository is the FastAPI backend for BAMTI DMS.
 
-1. Skeleton
-2. Health, WebSocket, and MockRunner
-3. MySQL models and repositories
-4. Docker and Nginx
-5. Tests and README
+The active backend is no longer a v1-only HTTP baseline. It supports real model inference across multiple API variants:
+
+- BAMTI 7-class model profile
+- AIHub 3-class model profile
+- REST frame inference
+- WebSocket stream inference
+- v4 realtime score responses
+- v6 one-second rolling average score responses
+- v4 raw A-score debug stream
+- CPU and CUDA Docker execution
 
 ## Architecture Rules
 
-- Keep `ws`, `inference`, `alerts`, and `storage` modules separated.
-- Model implementations must be replaceable through a runner interface.
-- Alert logic must be independent from model runner implementations.
-- Do not store raw frames or per-frame inference results in the database.
-- Store only `driving_session`, `distraction_event`, and `session_summary`.
-- Use one `asyncio.Queue(maxsize=N)` per WebSocket session.
-- Prefer low latency over processing every frame.
-- Match the WebSocket contract in `docs/websocket-contract.md`.
-- Select runners through a model manifest.
-- In MVP, only `MockRunner` needs to work.
+- Keep `api`, `inference`, `core`, and `storage` module boundaries clear.
+- Keep model execution behind the runner/manifest layer.
+- Keep model profile selection explicit. Do not hide BAMTI 7-class and AIHub 3-class differences in route code.
+- Keep `/api/health` unversioned.
+- Keep inference APIs versioned under `/api/v*` or `/api/aihub/v*`.
+- Do not store raw frames.
+- Do not persist per-frame inference results unless a separate persistence design is requested.
+- Do not reintroduce runtime mock inference. Tests may use test-local fakes or monkeypatching.
+- Treat `/api/v4/debug/inference/stream` as a debug-only endpoint.
+
+## Model Profiles
+
+### BAMTI 7-class
+
+The latest BAMTI model emits raw `A1`-`A16` scores and maps them to service-level detections in `app/inference/class_mapping.py`.
+
+Grouped classes use the maximum raw score, not an average.
+
+### AIHub 3-class
+
+AIHub routes use the legacy 3-class model through `AIHUB_MODEL_PATH`.
+
+## API Version Rules
+
+- v4 returns model scores immediately.
+- v6 returns one-second rolling average scores per session.
+- v4 debug exposes raw `A1`-`A16` scores for diagnostics.
 
 ## Coding Style
 
 - Use explicit type hints.
-- Keep Pydantic and SQLAlchemy schemas clear and small.
+- Keep Pydantic schemas clear and small.
 - Avoid broad abstractions until the code needs them.
-- Keep changes scoped to the active implementation step.
+- Keep changes scoped to the requested API/model profile.
+- Keep deployment paths container-relative when documenting Docker behavior.

@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import WebSocket
@@ -39,7 +39,7 @@ class MobileSession:
 
     @property
     def status(self) -> str:
-        if datetime.now(UTC) >= self.expires_at:
+        if datetime.now(timezone.utc) >= self.expires_at:
             return "expired"
         if self.streaming:
             return "streaming"
@@ -54,7 +54,7 @@ class MobileSessionManager:
         self._lock = asyncio.Lock()
 
     async def create_session(self, camera_url_base: str | None) -> MobileSession:
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         session_id = f"mobile-{uuid4().hex[:12]}"
         base = (camera_url_base or "").rstrip("/")
         if "{sessionId}" in base:
@@ -78,7 +78,7 @@ class MobileSessionManager:
             session = self._sessions.get(session_id)
             if session is None:
                 return None
-            if datetime.now(UTC) >= session.expires_at:
+            if datetime.now(timezone.utc) >= session.expires_at:
                 await self._close_session_connections(session)
                 self._sessions.pop(session_id, None)
                 return None

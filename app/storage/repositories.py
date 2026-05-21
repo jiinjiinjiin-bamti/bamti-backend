@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,7 @@ class DrivingSessionRepository:
         session = DrivingSession(
             id=session_id,
             driver_id=driver_id,
-            started_at=started_at or datetime.now(UTC),
+            started_at=started_at or datetime.now(timezone.utc),
             status=SessionStatus.ACTIVE,
         )
         self.db.add(session)
@@ -46,7 +46,7 @@ class DrivingSessionRepository:
         if session is None:
             return None
         session.status = SessionStatus.ENDED
-        session.ended_at = ended_at or datetime.now(UTC)
+        session.ended_at = ended_at or datetime.now(timezone.utc)
         await self.db.flush()
         return session
 
@@ -71,7 +71,7 @@ class DistractionEventRepository:
             severity=severity,
             confidence=confidence,
             message=message,
-            started_at=started_at or datetime.now(UTC),
+            started_at=started_at or datetime.now(timezone.utc),
             ended_at=ended_at,
         )
         self.db.add(event)

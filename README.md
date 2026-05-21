@@ -224,6 +224,8 @@ cp .env.dgx.example .env.dgx
 docker compose --env-file .env.dgx -f docker-compose.yml -f docker-compose.dgx.yml up -d --build api
 ```
 
+DGX uses `Dockerfile.dgx` with NVIDIA NGC PyTorch because DGX Spark/GB10 servers can be `aarch64`. The generic `pytorch/pytorch:*cuda*` image is not multi-arch and can fail with `exec format error` on ARM64 servers.
+
 Compose mounts the workspace model directory into the API container at `/models`. Model paths must be container paths, not host paths.
 
 Recommended CUDA model paths:

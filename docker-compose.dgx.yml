@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.cuda
+      dockerfile: Dockerfile.dgx
     gpus:
       - driver: nvidia
         device_ids:

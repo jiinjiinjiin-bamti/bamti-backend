@@ -217,6 +217,13 @@ CUDA:
 docker compose --env-file .env.cuda -f docker-compose.yml -f docker-compose.cuda.yml up -d --build
 ```
 
+DGX:
+
+```bash
+cp .env.dgx.example .env.dgx
+docker compose --env-file .env.dgx -f docker-compose.yml -f docker-compose.dgx.yml up -d --build api
+```
+
 Compose mounts the workspace model directory into the API container at `/models`. Model paths must be container paths, not host paths.
 
 Recommended CUDA model paths:
@@ -226,6 +233,8 @@ MODEL_PATH=/models/exp04_pseudo_ir_aug.pth
 AIHUB_MODEL_PATH=/models/final_model.pth
 MODEL_DEVICE=cuda
 ```
+
+DGX defaults to `NVIDIA_VISIBLE_DEVICES=0` because the backend process uses one CUDA device by default. Change it in `.env.dgx` only when you intentionally want another GPU or have changed the runtime to use multiple GPUs.
 
 ## Telemetry Runs
 

@@ -24,6 +24,7 @@ class FrameMetaMessage(BaseModel):
     width: int | None = Field(default=None, ge=1)
     height: int | None = Field(default=None, ge=1)
     encoding_ms: float | None = Field(default=None, alias="encodingMs", ge=0.0)
+    frame_time_seconds: float | None = Field(default=None, alias="frameTimeSeconds", ge=0.0)
 
 
 class SessionEndMessage(BaseModel):

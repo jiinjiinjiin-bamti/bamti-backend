@@ -98,7 +98,83 @@ def test_driver4_v7_websocket_returns_temporal_risk_scores(monkeypatch) -> None:
         assert result["type"] == "inference_result"
         assert result["detections"][2]["variableName"] == "phone_operation"
         assert result["riskScores"]["phone_operation"] > result["riskScores"]["distraction"]
+        assert result["riskScores"]["steering_operation"] == 0.0
+        assert result["riskScoring"]["excludedClasses"] == []
         assert result["riskScoring"]["scoreRange"] == [0, 100]
+
+
+def test_driver4_v7_websocket_uses_frame_time_for_risk_scores(monkeypatch) -> None:
+    monkeypatch.setattr("app.api.driver.v7.websocket.get_runner", lambda _: FakeDriver4Runner())
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/driver/v7/inference/stream") as websocket:
+        websocket.send_json(
+            {
+                "type": "session_start",
+                "sessionId": "session-1",
+                "targetTransmissionFps": 10,
+                "transport": "websocket",
+            },
+        )
+        assert websocket.receive_json()["type"] == "session_started"
+
+        for frame_id, frame_time_seconds in [("frame-1", 0.0), ("frame-2", 0.5)]:
+            websocket.send_json(
+                {
+                    "type": "frame_meta",
+                    "sessionId": "session-1",
+                    "frameId": frame_id,
+                    "clientSentAt": "12345.67",
+                    "contentType": "image/jpeg",
+                    "width": 224,
+                    "height": 224,
+                    "encodingMs": 8.0,
+                    "frameTimeSeconds": frame_time_seconds,
+                },
+            )
+            websocket.send_bytes(JPEG_BYTES)
+            result = websocket.receive_json()
+            assert result["type"] == "inference_result"
+
+        assert result["riskScores"]["phone_operation"] == 23.62
+
+
+def test_driver4_v7_websocket_resets_risk_scores_for_new_session_start(monkeypatch) -> None:
+    monkeypatch.setattr("app.api.driver.v7.websocket.get_runner", lambda _: FakeDriver4Runner())
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/driver/v7/inference/stream") as websocket:
+        for session_id, frame_id in [("session-1", "frame-1"), ("session-2", "frame-2")]:
+            websocket.send_json(
+                {
+                    "type": "session_start",
+                    "sessionId": session_id,
+                    "targetTransmissionFps": 10,
+                    "transport": "websocket",
+                },
+            )
+            assert websocket.receive_json()["type"] == "session_started"
+
+            websocket.send_json(
+                {
+                    "type": "frame_meta",
+                    "sessionId": session_id,
+                    "frameId": frame_id,
+                    "clientSentAt": "12345.67",
+                    "contentType": "image/jpeg",
+                    "width": 224,
+                    "height": 224,
+                    "encodingMs": 8.0,
+                },
+            )
+            websocket.send_bytes(JPEG_BYTES)
+
+            result = websocket.receive_json()
+            assert result["type"] == "inference_result"
+            if session_id == "session-1":
+                first_phone_score = result["riskScores"]["phone_operation"]
+            else:
+                assert result["riskScores"]["phone_operation"] == first_phone_score
 
 
 def test_driver4_v7_mobile_session_route_exists() -> None:

@@ -101,6 +101,7 @@ async def phone_frame_stream(websocket: WebSocket, session_id: str) -> None:
     connection = await mobile_session_manager.set_connection(session, "phone_frame", websocket)
     runner = get_runner("driver4-torch")
     risk_scorer = create_driver4_v7_risk_scorer()
+    was_streaming = session.streaming
 
     try:
         while True:
@@ -140,7 +141,11 @@ async def phone_frame_stream(websocket: WebSocket, session_id: str) -> None:
                 await _send_ws_error(connection, "frame_too_large", f"Frame exceeds max_frame_bytes={settings.max_frame_bytes}.", frame_meta.frame_id)
                 continue
             if not session.streaming:
+                was_streaming = False
                 continue
+            if not was_streaming:
+                risk_scorer = create_driver4_v7_risk_scorer()
+                was_streaming = True
 
             try:
                 result = await runner.infer(frame_bytes)

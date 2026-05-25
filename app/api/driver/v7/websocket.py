@@ -97,7 +97,10 @@ async def inference_stream(websocket: WebSocket) -> None:
                 await close_websocket(code=status.WS_1011_INTERNAL_ERROR)
                 return
 
-            risk_scores = risk_scorer.update({detection.variable_name: detection.score for detection in result.detections})
+            risk_scores = risk_scorer.update(
+                {detection.variable_name: detection.score for detection in result.detections},
+                now=frame.meta.frame_time_seconds,
+            )
             server_responded_at = _server_time_ms()
 
             await send_json(
@@ -142,6 +145,7 @@ async def inference_stream(websocket: WebSocket) -> None:
                     continue
 
                 session_id = session_start.session_id
+                risk_scorer = create_driver4_v7_risk_scorer()
                 await send_json(
                     {
                         "type": "session_started",

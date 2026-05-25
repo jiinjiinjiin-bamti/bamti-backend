@@ -1,51 +1,69 @@
 from app.inference.risk_scoring import Driver4RiskScorer
 
 
-def test_driver4_risk_scorer_accumulates_class_scores_with_elapsed_time() -> None:
+def test_driver4_risk_scorer_smooths_normalized_risk_input_with_ewma() -> None:
     scorer = Driver4RiskScorer(
+        alpha=0.08,
         activation_threshold=0.5,
         base_interval_seconds=0.1,
-        decay=0.95,
-        recovery_decay=0.85,
-        score_scale=10.0,
-        weights={"phone_operation": 1.3},
     )
 
     first = scorer.update({"phone_operation": 0.8}, now=10.0)
     second = scorer.update({"phone_operation": 0.8}, now=10.1)
     third = scorer.update({"phone_operation": 0.8}, now=10.2)
 
-    assert first["phone_operation"] == 10.4
-    assert second["phone_operation"] == 20.28
-    assert third["phone_operation"] == 29.67
+    assert first["phone_operation"] == 4.8
+    assert second["phone_operation"] == 9.22
+    assert third["phone_operation"] == 13.28
 
 
-def test_driver4_risk_scorer_recovers_when_confidence_is_below_activation() -> None:
+def test_driver4_risk_scorer_recovers_when_confidence_is_below_activation_threshold() -> None:
     scorer = Driver4RiskScorer(
+        alpha=0.08,
         activation_threshold=0.5,
         base_interval_seconds=0.1,
-        decay=0.95,
-        recovery_decay=0.85,
-        score_scale=10.0,
-        weights={"phone_operation": 1.3},
     )
 
     scorer.update({"phone_operation": 0.8}, now=10.0)
     recovered = scorer.update({"phone_operation": 0.2}, now=10.1)
 
-    assert recovered["phone_operation"] == 8.84
+    assert recovered["phone_operation"] == 4.42
+
+
+def test_driver4_risk_scorer_resets_when_frame_time_moves_backward() -> None:
+    scorer = Driver4RiskScorer(
+        alpha=0.08,
+        activation_threshold=0.5,
+        base_interval_seconds=0.1,
+    )
+
+    scorer.update({"phone_operation": 0.8}, now=10.0)
+    scorer.update({"phone_operation": 0.8}, now=10.1)
+    reset_score = scorer.update({"phone_operation": 0.8}, now=5.0)
+
+    assert reset_score["phone_operation"] == 4.8
 
 
 def test_driver4_risk_scorer_clamps_scores_to_100() -> None:
     scorer = Driver4RiskScorer(
+        alpha=1.0,
         activation_threshold=0.5,
         base_interval_seconds=0.1,
-        decay=0.95,
-        recovery_decay=0.85,
-        score_scale=200.0,
-        weights={"phone_operation": 1.3},
     )
 
     scores = scorer.update({"phone_operation": 1.0}, now=10.0)
 
     assert scores["phone_operation"] == 100.0
+
+
+def test_driver4_risk_scorer_excludes_non_risk_classes() -> None:
+    scorer = Driver4RiskScorer(
+        alpha=0.08,
+        activation_threshold=0.5,
+        excluded_classes={"steering_operation"},
+    )
+
+    scores = scorer.update({"phone_operation": 0.8, "steering_operation": 0.9}, now=10.0)
+
+    assert scores == {"phone_operation": 4.8}
+    assert scorer.metadata()["excludedClasses"] == ["steering_operation"]

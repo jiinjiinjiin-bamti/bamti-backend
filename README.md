@@ -253,8 +253,8 @@ docker compose --env-file .env.cuda -f docker-compose.yml -f docker-compose.cuda
 DGX:
 
 ```bash
-cp .env.dgx.example .env.dgx
-docker compose --env-file .env.dgx -f docker-compose.yml -f docker-compose.dgx.yml up -d --build api
+cp .env.dgx.example .env
+docker compose -f docker-compose.yml -f docker-compose.dgx.yml up -d --build api
 ```
 
 DGX uses `Dockerfile.dgx` with NVIDIA NGC PyTorch because DGX Spark/GB10 servers can be `aarch64`. The generic `pytorch/pytorch:*cuda*` image is not multi-arch and can fail with `exec format error` on ARM64 servers. The DGX image uses `nvcr.io/nvidia/pytorch:25.10-py3` so GB10 is not blocked by older NGC runtime checks.
@@ -269,7 +269,7 @@ AIHUB_MODEL_PATH=/models/final_model.pth
 MODEL_DEVICE=cuda
 ```
 
-DGX defaults to `NVIDIA_VISIBLE_DEVICES=0` because the backend process uses one CUDA device by default. Change it in `.env.dgx` only when you intentionally want another GPU or have changed the runtime to use multiple GPUs.
+DGX defaults to `NVIDIA_VISIBLE_DEVICES=0` because the backend process uses one CUDA device by default. Change it in `.env` only when you intentionally want another GPU or have changed the runtime to use multiple GPUs.
 
 ## Telemetry Runs
 

@@ -44,9 +44,25 @@ class Settings(BaseSettings):
         default=0.5,
         validation_alias=AliasChoices("DRIVER4_V7_ACTIVATION_THRESHOLD", "BAMTI_DRIVER4_V7_ACTIVATION_THRESHOLD"),
     )
-    driver4_v7_alpha: float = Field(
-        default=0.08,
-        validation_alias=AliasChoices("DRIVER4_V7_ALPHA", "BAMTI_DRIVER4_V7_ALPHA"),
+    driver4_v7_charge_rate: float = Field(
+        default=35.0,
+        validation_alias=AliasChoices("DRIVER4_V7_CHARGE_RATE", "BAMTI_DRIVER4_V7_CHARGE_RATE"),
+    )
+    driver4_v7_decay_rate: float = Field(
+        default=20.0,
+        validation_alias=AliasChoices("DRIVER4_V7_DECAY_RATE", "BAMTI_DRIVER4_V7_DECAY_RATE"),
+    )
+    driver4_v7_warning_threshold: float = Field(
+        default=70.0,
+        validation_alias=AliasChoices("DRIVER4_V7_WARNING_THRESHOLD", "BAMTI_DRIVER4_V7_WARNING_THRESHOLD"),
+    )
+    driver4_v7_max_delta_seconds: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices("DRIVER4_V7_MAX_DELTA_SECONDS", "BAMTI_DRIVER4_V7_MAX_DELTA_SECONDS"),
+    )
+    driver4_v7_reset_gap_seconds: float = Field(
+        default=2.0,
+        validation_alias=AliasChoices("DRIVER4_V7_RESET_GAP_SECONDS", "BAMTI_DRIVER4_V7_RESET_GAP_SECONDS"),
     )
     telemetry_runs_dir: Path = Field(
         default=backend_root / "telemetry_runs",

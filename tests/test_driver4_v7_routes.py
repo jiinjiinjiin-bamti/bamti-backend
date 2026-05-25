@@ -78,7 +78,7 @@ def test_driver4_v7_websocket_returns_temporal_risk_scores(monkeypatch) -> None:
         )
         started = websocket.receive_json()
         assert started["type"] == "session_started"
-        assert started["riskScoring"]["algorithm"] == "ema_temporal_risk_score"
+        assert started["riskScoring"]["algorithm"] == "time_buffer_charge_decay_risk_accumulation"
 
         websocket.send_json(
             {
@@ -100,7 +100,14 @@ def test_driver4_v7_websocket_returns_temporal_risk_scores(monkeypatch) -> None:
         assert result["riskScores"]["phone_operation"] > result["riskScores"]["distraction"]
         assert result["riskScores"]["steering_operation"] == 0.0
         assert result["riskScoring"]["excludedClasses"] == []
+        assert result["riskScoring"]["warningExcludedClasses"] == ["steering_operation"]
         assert result["riskScoring"]["scoreRange"] == [0, 100]
+        assert result["riskWarning"] == {
+            "isWarning": False,
+            "warningClass": "phone_operation",
+            "warningScore": 2.1,
+            "warningThreshold": 70.0,
+        }
 
 
 def test_driver4_v7_websocket_uses_frame_time_for_risk_scores(monkeypatch) -> None:
@@ -136,7 +143,7 @@ def test_driver4_v7_websocket_uses_frame_time_for_risk_scores(monkeypatch) -> No
             result = websocket.receive_json()
             assert result["type"] == "inference_result"
 
-        assert result["riskScores"]["phone_operation"] == 23.62
+        assert result["riskScores"]["phone_operation"] == 12.6
 
 
 def test_driver4_v7_websocket_resets_risk_scores_for_new_session_start(monkeypatch) -> None:

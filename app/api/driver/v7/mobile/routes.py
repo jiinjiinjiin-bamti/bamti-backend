@@ -165,6 +165,7 @@ async def phone_frame_stream(websocket: WebSocket, session_id: str) -> None:
                 continue
 
             risk_scores = risk_scorer.update({detection.variable_name: detection.score for detection in result.detections})
+            risk_warning = risk_scorer.warning_state()
             server_responded_at = _server_time_ms()
             await mobile_session_manager.send_dashboard_event(
                 session,
@@ -183,6 +184,7 @@ async def phone_frame_stream(websocket: WebSocket, session_id: str) -> None:
                     },
                     "detections": [detection.model_dump(by_alias=True) for detection in result.detections],
                     "riskScores": risk_scores,
+                    "riskWarning": risk_warning,
                     "riskScoring": risk_scorer.metadata(),
                     "model": result.model.model_dump(by_alias=True),
                     "telemetry": result.telemetry.model_dump(by_alias=True),

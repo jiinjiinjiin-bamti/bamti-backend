@@ -87,6 +87,7 @@ async def pre_analysis_stream(websocket: WebSocket) -> None:
                 {detection.variable_name: detection.score for detection in result.detections},
                 now=frame.meta.frame_time_seconds,
             )
+            risk_warning = risk_scorer.warning_state()
             await send_json(
                 {
                     "type": "inference_result",
@@ -97,6 +98,7 @@ async def pre_analysis_stream(websocket: WebSocket) -> None:
                     "serverRespondedAt": _server_time_ms(),
                     "detections": [detection.model_dump(by_alias=True) for detection in result.detections],
                     "riskScores": risk_scores,
+                    "riskWarning": risk_warning,
                     "riskScoring": risk_scorer.metadata(),
                     "model": result.model.model_dump(by_alias=True),
                     "queue": {

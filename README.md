@@ -92,10 +92,11 @@ v6:
 
 Driver4 v7:
 
-- Applies EWMA-based temporal risk score smoothing to the Driver4 risk classes.
+- Applies time-buffer charge/decay risk accumulation to the Driver4 risk classes.
 - Returns raw model confidence in `detections` and class-level `riskScores` in the 0-100 range.
 - Calculates `riskScores` for all Driver4 classes, including `steering_operation`, while the frontend can still style normal control signals separately.
-- The frontend can compare `riskScores[class]` against its selected threshold without changing backend code.
+- Excludes `steering_operation` from final warning candidates because it can represent normal steering contact.
+- Returns `riskWarning` when the highest warning-enabled risk score crosses the configured threshold.
 
 v4 debug:
 
@@ -201,7 +202,11 @@ MODEL_DEVICE=cpu
 MODEL_INPUT_SIZE=224
 MODEL_SCORE_ACTIVATION=softmax
 DRIVER4_V7_ACTIVATION_THRESHOLD=0.5
-DRIVER4_V7_ALPHA=0.08
+DRIVER4_V7_CHARGE_RATE=35
+DRIVER4_V7_DECAY_RATE=20
+DRIVER4_V7_WARNING_THRESHOLD=70
+DRIVER4_V7_MAX_DELTA_SECONDS=0.5
+DRIVER4_V7_RESET_GAP_SECONDS=2.0
 TORCH_NUM_THREADS=5
 TORCH_COMPILE_BACKEND=inductor
 TORCH_COMPILE_MODE=reduce-overhead

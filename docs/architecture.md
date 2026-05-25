@@ -37,6 +37,7 @@ WS   /api/aihub/v6/inference/stream
 
 WS   /api/driver/v4/inference/stream
 WS   /api/driver/v6/inference/stream
+WS   /api/driver/v7/inference/stream
 ```
 
 ## Module Boundaries

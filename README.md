@@ -72,6 +72,9 @@ WS   /api/driver/v4/inference/stream
 
 GET  /api/driver/v6/detection-classes
 WS   /api/driver/v6/inference/stream
+
+GET  /api/driver/v7/detection-classes
+WS   /api/driver/v7/inference/stream
 ```
 
 ## API Version Behavior
@@ -86,6 +89,12 @@ v6:
 - Aggregates detection scores in a one-second rolling window.
 - Returns averaged scores per session.
 - Intended for more stable threshold-based UI updates.
+
+Driver4 v7:
+
+- Applies EMA-based temporal risk score accumulation to the Driver4 4-class stream.
+- Returns raw model confidence in `detections` and class-level `riskScores` in the 0-100 range.
+- The frontend can compare `riskScores[class]` against its selected threshold without changing backend code.
 
 v4 debug:
 
@@ -190,6 +199,14 @@ DRIVER4_MODEL_PATH=/models/final_model_4cls.pth
 MODEL_DEVICE=cpu
 MODEL_INPUT_SIZE=224
 MODEL_SCORE_ACTIVATION=softmax
+DRIVER4_V7_ACTIVATION_THRESHOLD=0.5
+DRIVER4_V7_DECAY=0.95
+DRIVER4_V7_RECOVERY_DECAY=0.85
+DRIVER4_V7_SCORE_SCALE=10
+DRIVER4_V7_WEIGHT_BODY_TOUCHING=1.0
+DRIVER4_V7_WEIGHT_DISTRACTION=0.8
+DRIVER4_V7_WEIGHT_PHONE_OPERATION=1.3
+DRIVER4_V7_WEIGHT_STEERING_OPERATION=1.0
 TORCH_NUM_THREADS=5
 TORCH_COMPILE_BACKEND=inductor
 TORCH_COMPILE_MODE=reduce-overhead
@@ -221,6 +238,7 @@ Detection classes:
 curl http://127.0.0.1:8000/api/v4/detection-classes
 curl http://127.0.0.1:8000/api/aihub/v4/detection-classes
 curl http://127.0.0.1:8000/api/driver/v4/detection-classes
+curl http://127.0.0.1:8000/api/driver/v7/detection-classes
 ```
 
 ## Docker Compose

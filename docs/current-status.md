@@ -74,6 +74,9 @@ WS   /api/driver/v4/inference/stream
 
 GET  /api/driver/v6/detection-classes
 WS   /api/driver/v6/inference/stream
+
+GET  /api/driver/v7/detection-classes
+WS   /api/driver/v7/inference/stream
 ```
 
 ## Important Files

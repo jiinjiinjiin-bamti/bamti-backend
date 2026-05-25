@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.aihub.inference import router as inference_router
+from app.api.aihub.inference import manifest_router as inference_router
 from app.api.aihub.mobile_v6 import router as mobile_router
 from app.api.aihub.websocket import router as websocket_router
 

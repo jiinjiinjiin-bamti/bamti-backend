@@ -8,6 +8,7 @@ The active backend is no longer a v1-only HTTP baseline. It supports real model 
 
 - BAMTI 7-class model profile
 - AIHub 3-class model profile
+- Driver4 4-class model profile
 - REST frame inference
 - WebSocket stream inference
 - v4 realtime score responses
@@ -19,9 +20,9 @@ The active backend is no longer a v1-only HTTP baseline. It supports real model 
 
 - Keep `api`, `inference`, `core`, and `storage` module boundaries clear.
 - Keep model execution behind the runner/manifest layer.
-- Keep model profile selection explicit. Do not hide BAMTI 7-class and AIHub 3-class differences in route code.
+- Keep model profile selection explicit. Do not hide BAMTI 7-class, AIHub 3-class, and Driver4 4-class differences in route code.
 - Keep `/api/health` unversioned.
-- Keep inference APIs versioned under `/api/v*` or `/api/aihub/v*`.
+- Keep inference APIs versioned under `/api/v*`, `/api/aihub/v*`, or `/api/driver/v*`.
 - Do not store raw frames.
 - Do not persist per-frame inference results unless a separate persistence design is requested.
 - Do not reintroduce runtime mock inference. Tests may use test-local fakes or monkeypatching.
@@ -38,6 +39,10 @@ Grouped classes use the maximum raw score, not an average.
 ### AIHub 3-class
 
 AIHub routes use the legacy 3-class model through `AIHUB_MODEL_PATH`.
+
+### Driver4 4-class
+
+Driver4 routes use `final_model_4cls.pth` through `DRIVER4_MODEL_PATH` and expose the checkpoint-derived classes `body_touching`, `distraction`, `phone_operation`, and `steering_operation`.
 
 ## API Version Rules
 

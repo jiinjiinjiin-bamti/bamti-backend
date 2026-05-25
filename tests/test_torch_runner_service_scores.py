@@ -2,7 +2,14 @@ from pathlib import Path
 
 import torch
 
-from app.inference.class_mapping import raw_action_class_names, service_detection_classes
+from app.core.config import settings
+from app.inference.class_mapping import (
+    driver4_raw_class_names,
+    driver4_service_detection_classes,
+    raw_action_class_names,
+    service_detection_classes,
+)
+from app.inference.manifest import get_runner
 from app.inference.model_loader import LoadedModel
 from app.inference.torch_runner import BamtiTorchRunner
 
@@ -70,3 +77,35 @@ def test_debug_raw_detection_scores_use_raw_action_classes() -> None:
     assert [detection.variable_name for detection in detections] == list(raw_action_class_names)
     assert detections[0].score == 0.01
     assert detections[-1].score == 0.16
+
+
+def test_driver4_runner_uses_configured_model_path(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "driver4_model_path", Path("final_model_4cls.pth"))
+
+    runner = get_runner("driver4-torch")
+
+    assert isinstance(runner, BamtiTorchRunner)
+    assert runner.model_path == Path("final_model_4cls.pth")
+
+
+def test_driver4_scores_map_checkpoint_classes_to_service_detections() -> None:
+    loaded_model = LoadedModel(
+        model=torch.nn.Identity(),
+        class_names=[detection_class.variable_name for detection_class in driver4_service_detection_classes],
+        device=torch.device("cpu"),
+        model_path=Path("final_model_4cls.pth"),
+        compiled=False,
+        architecture="torchvision_vit_b_16_driver4",
+        service_classes=driver4_service_detection_classes,
+        raw_class_names=driver4_raw_class_names,
+    )
+    scores = torch.tensor([0.11, 0.22, 0.33, 0.44])
+
+    detections = BamtiTorchRunner()._detections_from_scores(loaded_model, scores)
+
+    assert [(detection.variable_name, detection.display_name, detection.score) for detection in detections] == [
+        ("body_touching", "신체 만짐", 0.11),
+        ("distraction", "주의 분산", 0.22),
+        ("phone_operation", "핸드폰 조작", 0.33),
+        ("steering_operation", "핸들 조작", 0.44),
+    ]

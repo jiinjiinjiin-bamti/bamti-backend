@@ -63,3 +63,36 @@ service_detection_classes = (
         threshold=0.65,
     ),
 )
+
+driver4_raw_class_names = ("신체만짐", "주의분산", "핸드폰 조작", "핸들 조작")
+
+driver4_service_detection_classes = (
+    ServiceDetectionClass(
+        variable_name="body_touching",
+        display_name="신체 만짐",
+        description="Driver4 model class: 신체만짐",
+        raw_class_names=("신체만짐",),
+        threshold=0.65,
+    ),
+    ServiceDetectionClass(
+        variable_name="distraction",
+        display_name="주의 분산",
+        description="Driver4 model class: 주의분산",
+        raw_class_names=("주의분산",),
+        threshold=0.65,
+    ),
+    ServiceDetectionClass(
+        variable_name="phone_operation",
+        display_name="핸드폰 조작",
+        description="Driver4 model class: 핸드폰 조작",
+        raw_class_names=("핸드폰 조작",),
+        threshold=0.65,
+    ),
+    ServiceDetectionClass(
+        variable_name="steering_operation",
+        display_name="핸들 조작",
+        description="Driver4 model class: 핸들 조작",
+        raw_class_names=("핸들 조작",),
+        threshold=0.65,
+    ),
+)

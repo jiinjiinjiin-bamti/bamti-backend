@@ -2,7 +2,7 @@
 
 Driver Monitoring System backend for BAMTI.
 
-The backend exposes FastAPI endpoints for real model inference. It supports both the current BAMTI 7-class model profile and the restored AIHub 3-class profile.
+The backend exposes FastAPI endpoints for real model inference. It supports the BAMTI 7-class, AIHub 3-class, and Driver4 4-class model profiles.
 
 ## Current Capabilities
 
@@ -11,6 +11,7 @@ The backend exposes FastAPI endpoints for real model inference. It supports both
 - WebSocket latest-pending inference
 - BAMTI 7-class model inference
 - AIHub 3-class model inference
+- Driver4 4-class model inference
 - v4 realtime score responses
 - v6 one-second rolling average score responses
 - v4 raw score debug stream
@@ -40,14 +41,12 @@ WS   /api/v2/inference/stream
 WS   /api/v3/inference/stream
 
 GET  /api/v4/detection-classes
-POST /api/v4/inference/frame
 WS   /api/v4/inference/stream
 WS   /api/v4/debug/inference/stream
 
 WS   /api/v5/inference/stream
 
 GET  /api/v6/detection-classes
-POST /api/v6/inference/frame
 WS   /api/v6/inference/stream
 ```
 
@@ -59,12 +58,20 @@ POST /api/aihub/inference/frame
 WS   /api/aihub/inference/stream
 
 GET  /api/aihub/v4/detection-classes
-POST /api/aihub/v4/inference/frame
 WS   /api/aihub/v4/inference/stream
 
 GET  /api/aihub/v6/detection-classes
-POST /api/aihub/v6/inference/frame
 WS   /api/aihub/v6/inference/stream
+```
+
+### Driver4 4-class
+
+```text
+GET  /api/driver/v4/detection-classes
+WS   /api/driver/v4/inference/stream
+
+GET  /api/driver/v6/detection-classes
+WS   /api/driver/v6/inference/stream
 ```
 
 ## API Version Behavior
@@ -145,6 +152,17 @@ The AIHub profile uses the legacy model and the following service classes:
 | `surrounding_inattention` | 주변 주의 소홀 |
 | `vehicle_interaction` | 차량 간 상호작용 |
 
+### Driver4 4-class
+
+The Driver4 profile uses the `final_model_4cls.pth` checkpoint and exposes one service detection for each model output:
+
+| Variable | Display | Checkpoint class |
+|---|---|---|
+| `body_touching` | 신체 만짐 | 신체만짐 |
+| `distraction` | 주의 분산 | 주의분산 |
+| `phone_operation` | 핸드폰 조작 | 핸드폰 조작 |
+| `steering_operation` | 핸들 조작 | 핸들 조작 |
+
 ## Preprocessing
 
 Frames are expected as JPEG images.
@@ -168,6 +186,7 @@ ENVIRONMENT=local
 INFERENCE_RUNNER=bamti-torch
 MODEL_PATH=/models/exp04_pseudo_ir_aug.pth
 AIHUB_MODEL_PATH=/models/final_model.pth
+DRIVER4_MODEL_PATH=/models/final_model_4cls.pth
 MODEL_DEVICE=cpu
 MODEL_INPUT_SIZE=224
 MODEL_SCORE_ACTIVATION=softmax
@@ -201,6 +220,7 @@ Detection classes:
 ```bash
 curl http://127.0.0.1:8000/api/v4/detection-classes
 curl http://127.0.0.1:8000/api/aihub/v4/detection-classes
+curl http://127.0.0.1:8000/api/driver/v4/detection-classes
 ```
 
 ## Docker Compose

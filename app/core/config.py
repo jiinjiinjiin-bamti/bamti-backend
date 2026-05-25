@@ -21,6 +21,10 @@ class Settings(BaseSettings):
         default=workspace_root / "model" / "final_model.pth",
         validation_alias=AliasChoices("AIHUB_MODEL_PATH", "BAMTI_AIHUB_MODEL_PATH"),
     )
+    driver4_model_path: Path = Field(
+        default=workspace_root / "model" / "final_model_4cls.pth",
+        validation_alias=AliasChoices("DRIVER4_MODEL_PATH", "BAMTI_DRIVER4_MODEL_PATH"),
+    )
     model_device: str = Field(default="cpu", validation_alias=AliasChoices("MODEL_DEVICE", "BAMTI_MODEL_DEVICE"))
     model_input_size: int = Field(default=224, validation_alias=AliasChoices("MODEL_INPUT_SIZE", "BAMTI_MODEL_INPUT_SIZE"))
     model_score_activation: str = Field(

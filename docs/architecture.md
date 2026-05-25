@@ -2,7 +2,7 @@
 
 This backend exposes FastAPI inference APIs for BAMTI DMS.
 
-The active architecture supports both HTTP frame upload and WebSocket stream inference. It also supports two model profiles: BAMTI 7-class and AIHub 3-class.
+The active architecture supports both HTTP frame upload and WebSocket stream inference. It also supports three model profiles: BAMTI 7-class, AIHub 3-class, and Driver4 4-class.
 
 ## Runtime Entry Point
 
@@ -11,6 +11,7 @@ The active architecture supports both HTTP frame upload and WebSocket stream inf
 - `/api/health` remains unversioned.
 - Versioned inference APIs live under `/api/v*`.
 - AIHub inference APIs live under `/api/aihub/*`.
+- Driver4 inference APIs live under `/api/driver/*`.
 
 ## API Shape
 
@@ -24,19 +25,18 @@ GET  /api/v1/telemetry/runs
 WS   /api/v2/inference/stream
 WS   /api/v3/inference/stream
 
-POST /api/v4/inference/frame
 WS   /api/v4/inference/stream
 WS   /api/v4/debug/inference/stream
 
 WS   /api/v5/inference/stream
 
-POST /api/v6/inference/frame
 WS   /api/v6/inference/stream
 
-POST /api/aihub/v4/inference/frame
 WS   /api/aihub/v4/inference/stream
-POST /api/aihub/v6/inference/frame
 WS   /api/aihub/v6/inference/stream
+
+WS   /api/driver/v4/inference/stream
+WS   /api/driver/v6/inference/stream
 ```
 
 ## Module Boundaries
@@ -93,6 +93,7 @@ Important runners:
 - `bamti-torch`: BAMTI 7-class model.
 - `bamti-torch-debug-raw`: BAMTI 7-class model with raw score debug output.
 - `aihub-torch`: AIHub 3-class model.
+- `driver4-torch`: Driver4 4-class model.
 
 Model loading is handled by `app/inference/model_loader.py`.
 
@@ -100,6 +101,7 @@ The loader supports:
 
 - `timm` `vit_base_patch16_224` custom checkpoint for BAMTI 7-class.
 - `torchvision.models.vit_b_16` checkpoint for AIHub 3-class.
+- `torchvision.models.vit_b_16` backbone with a separate `classifier` head for Driver4 4-class.
 
 The active model cache keeps one active loaded model. Switching model paths releases the previous cached model to reduce memory pressure.
 
@@ -166,4 +168,5 @@ Docker Compose mounts the workspace model directory into the API container:
 ../model -> /models
 MODEL_PATH=/models/exp04_pseudo_ir_aug.pth
 AIHUB_MODEL_PATH=/models/final_model.pth
+DRIVER4_MODEL_PATH=/models/final_model_4cls.pth
 ```

@@ -10,9 +10,11 @@ from app.inference.schemas import ModelManifest
 
 
 router = APIRouter(tags=["aihub-inference"])
+manifest_router = APIRouter(tags=["aihub-inference"])
 
 
 @router.get("/detection-classes", response_model=ModelManifest)
+@manifest_router.get("/detection-classes", response_model=ModelManifest)
 async def get_detection_classes() -> ModelManifest:
     return get_model_manifest("aihub-torch")
 

@@ -113,6 +113,14 @@ def test_aihub_inference_frame_returns_aihub_model_scores(monkeypatch) -> None:
     ]
 
 
+def test_aihub_versioned_routes_do_not_expose_http_frame_inference() -> None:
+    client = TestClient(app)
+
+    for version in ("v4", "v6"):
+        response = client.post(f"/api/aihub/{version}/inference/frame")
+        assert response.status_code == 404
+
+
 def test_aihub_mobile_session_routes_support_v4_and_v6_prefixes() -> None:
     client = TestClient(app)
 

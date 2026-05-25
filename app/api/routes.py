@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.aihub import router as aihub_router
+from app.api.driver import router as driver_router
 from app.api.health import router as health_router
 from app.api.v1 import router as v1_router
 from app.api.v2 import router as v2_router
@@ -19,3 +20,4 @@ api_router.include_router(v4_router)
 api_router.include_router(v5_router)
 api_router.include_router(v6_router)
 api_router.include_router(aihub_router)
+api_router.include_router(driver_router)

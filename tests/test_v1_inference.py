@@ -132,6 +132,14 @@ def test_inference_frame_accepts_jpeg_and_returns_detection_scores(monkeypatch) 
     assert payload["telemetry"]["serverTotalMs"] == 73.0
 
 
+def test_realtime_version_routes_do_not_expose_http_frame_inference() -> None:
+    client = TestClient(app)
+
+    for api_version in ("v4", "v6"):
+        response = client.post(f"/api/{api_version}/inference/frame")
+        assert response.status_code == 404
+
+
 def test_inference_frame_rejects_non_jpeg() -> None:
     client = TestClient(app)
 

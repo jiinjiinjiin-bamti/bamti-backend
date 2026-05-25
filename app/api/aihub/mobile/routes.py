@@ -95,15 +95,19 @@ async def delete_mobile_session(session_id: str) -> MobileSessionResponse:
     return _session_response(session)
 
 
-@router.websocket("/sessions/{session_id}/phone-frame-stream")
-async def phone_frame_stream(websocket: WebSocket, session_id: str) -> None:
+async def run_phone_frame_stream(
+    websocket: WebSocket,
+    session_id: str,
+    runner_name: str,
+    model_profile: str,
+) -> None:
     await websocket.accept()
     session = await _require_ws_session(websocket, session_id)
     if session is None:
         return
 
     connection = await mobile_session_manager.set_connection(session, "phone_frame", websocket)
-    runner = get_runner("aihub-torch")
+    runner = get_runner(runner_name)
 
     try:
         while True:
@@ -153,7 +157,7 @@ async def phone_frame_stream(websocket: WebSocket, session_id: str) -> None:
             try:
                 result = await runner.infer(frame_bytes)
             except Exception:
-                logger.exception("AIHub mobile inference failed for session %s frame %s", session_id, frame_meta.frame_id)
+                logger.exception("%s mobile inference failed for session %s frame %s", model_profile, session_id, frame_meta.frame_id)
                 await mobile_session_manager.set_streaming(session, False)
                 await _send_ws_error(connection, "inference_failed", "Mobile inference failed. Check backend model/runtime logs.", frame_meta.frame_id)
                 await mobile_session_manager.send_dashboard_event(
@@ -195,6 +199,11 @@ async def phone_frame_stream(websocket: WebSocket, session_id: str) -> None:
         await mobile_session_manager.clear_connection(session, "phone_frame", connection)
         if websocket.application_state != WebSocketState.DISCONNECTED:
             await websocket.close()
+
+
+@router.websocket("/sessions/{session_id}/phone-frame-stream")
+async def phone_frame_stream(websocket: WebSocket, session_id: str) -> None:
+    await run_phone_frame_stream(websocket, session_id, runner_name="aihub-torch", model_profile="AIHub")
 
 
 @router.websocket("/sessions/{session_id}/dashboard-channel")

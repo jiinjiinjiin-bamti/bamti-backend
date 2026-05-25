@@ -9,7 +9,13 @@ from torch import nn
 from torchvision.models import vit_b_16
 
 from app.core.config import settings
-from app.inference.class_mapping import ServiceDetectionClass, raw_action_class_names, service_detection_classes
+from app.inference.class_mapping import (
+    ServiceDetectionClass,
+    driver4_raw_class_names,
+    driver4_service_detection_classes,
+    raw_action_class_names,
+    service_detection_classes,
+)
 
 
 class BamtiVisionModel(nn.Module):
@@ -19,6 +25,17 @@ class BamtiVisionModel(nn.Module):
 
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return self.backbone(image)
+
+
+class Driver4VisionModel(nn.Module):
+    def __init__(self, num_classes: int) -> None:
+        super().__init__()
+        self.backbone = vit_b_16(weights=None)
+        self.backbone.heads = nn.Identity()
+        self.classifier = nn.Linear(768, num_classes)
+
+    def forward(self, image: torch.Tensor) -> torch.Tensor:
+        return self.classifier(self.backbone(image))
 
 
 class BamtiTimmVisionModel(nn.Module):
@@ -102,6 +119,10 @@ def _is_timm_custom_vit_state_dict(state_dict: dict[str, Any]) -> bool:
     return any(key.startswith("backbone.patch_embed.") or key.startswith("backbone.blocks.") for key in state_dict)
 
 
+def _is_driver4_vit_state_dict(state_dict: dict[str, Any]) -> bool:
+    return "classifier.weight" in state_dict and "backbone.heads.head.weight" not in state_dict
+
+
 def _release_cached_models() -> None:
     _active_model_cache.clear()
     gc.collect()
@@ -157,6 +178,28 @@ def _load_torchvision_vit_model(checkpoint: dict[str, Any], state_dict: dict[str
     )
 
 
+def _load_driver4_vit_model(state_dict: dict[str, Any], compiled: bool, model_path: Path) -> LoadedModel:
+    model = Driver4VisionModel(num_classes=len(driver4_raw_class_names))
+    model.load_state_dict(state_dict, strict=True)
+
+    device = _resolve_device(settings.model_device)
+    model.to(device)
+    model.eval()
+    if compiled:
+        model = _compile_model(model)
+
+    return LoadedModel(
+        model=model,
+        class_names=[detection_class.variable_name for detection_class in driver4_service_detection_classes],
+        device=device,
+        model_path=model_path,
+        compiled=compiled,
+        architecture="torchvision_vit_b_16_driver4",
+        service_classes=driver4_service_detection_classes,
+        raw_class_names=driver4_raw_class_names,
+    )
+
+
 def load_model(compiled: bool = False) -> LoadedModel:
     return load_model_from_path(settings.model_path, compiled)
 
@@ -188,6 +231,9 @@ def _load_model_from_path_uncached(model_path: Path, compiled: bool = False) -> 
 
     if _is_timm_custom_vit_state_dict(state_dict):
         return _load_timm_custom_vit_model(state_dict, compiled, model_path)
+
+    if _is_driver4_vit_state_dict(state_dict):
+        return _load_driver4_vit_model(state_dict, compiled, model_path)
 
     if not isinstance(checkpoint, dict):
         raise ValueError("Torchvision checkpoint must be a dictionary.")

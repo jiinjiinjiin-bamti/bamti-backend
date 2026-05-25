@@ -37,8 +37,11 @@ def _parse_json_message(raw_message: str) -> dict:
     return payload
 
 
-@router.websocket("/inference/stream")
-async def inference_stream(websocket: WebSocket) -> None:
+async def run_smoothed_inference_stream(
+    websocket: WebSocket,
+    runner_name: str = "aihub-torch",
+    model_profile: str = "aihub",
+) -> None:
     await websocket.accept()
 
     session_id: str | None = None
@@ -80,7 +83,7 @@ async def inference_stream(websocket: WebSocket) -> None:
     async def process_latest_frames() -> None:
         nonlocal pending_frame
 
-        runner = get_runner("aihub-torch")
+        runner = get_runner(runner_name)
 
         while not stop_event.is_set():
             await frame_available.wait()
@@ -99,7 +102,7 @@ async def inference_stream(websocket: WebSocket) -> None:
             try:
                 result = await runner.infer(frame.frame_bytes)
             except Exception:
-                logger.exception("AIHub inference failed for session %s frame %s", session_id, frame.meta.frame_id)
+                logger.exception("%s inference failed for session %s frame %s", model_profile, session_id, frame.meta.frame_id)
                 stop_event.set()
                 await send_error("inference_failed", "AIHub WebSocket inference failed. Check backend model/runtime logs.", frame.meta.frame_id)
                 await close_websocket(code=status.WS_1011_INTERNAL_ERROR)
@@ -252,3 +255,8 @@ async def inference_stream(websocket: WebSocket) -> None:
             pass
         if websocket.application_state != WebSocketState.DISCONNECTED:
             await close_websocket()
+
+
+@router.websocket("/inference/stream")
+async def inference_stream(websocket: WebSocket) -> None:
+    await run_smoothed_inference_stream(websocket)

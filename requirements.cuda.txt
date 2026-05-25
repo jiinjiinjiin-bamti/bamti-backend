@@ -6,7 +6,6 @@ sqlalchemy[asyncio]
 aiomysql
 pillow
 numpy
-opencv-python-headless
 timm
 pytest
 pytest-asyncio

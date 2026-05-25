@@ -177,6 +177,47 @@ def test_driver4_v7_websocket_resets_risk_scores_for_new_session_start(monkeypat
                 assert result["riskScores"]["phone_operation"] == first_phone_score
 
 
+def test_driver4_v7_pre_analysis_websocket_processes_all_frames_in_order(monkeypatch) -> None:
+    monkeypatch.setattr("app.api.driver.v7.pre_analysis_websocket.get_runner", lambda _: FakeDriver4Runner())
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/driver/v7/pre-analysis/stream") as websocket:
+        websocket.send_json(
+            {
+                "type": "session_start",
+                "sessionId": "pre-analysis-session",
+                "targetTransmissionFps": 8,
+                "transport": "websocket",
+            },
+        )
+        started = websocket.receive_json()
+        assert started["type"] == "session_started"
+        assert started["queuePolicy"] == "fifo_no_drop"
+
+        for frame_id, frame_time_seconds in [("frame-1", 0.0), ("frame-2", 0.125), ("frame-3", 0.25)]:
+            websocket.send_json(
+                {
+                    "type": "frame_meta",
+                    "sessionId": "pre-analysis-session",
+                    "frameId": frame_id,
+                    "clientSentAt": "12345.67",
+                    "contentType": "image/jpeg",
+                    "width": 224,
+                    "height": 224,
+                    "encodingMs": 8.0,
+                    "frameTimeSeconds": frame_time_seconds,
+                },
+            )
+            websocket.send_bytes(JPEG_BYTES)
+
+        results = [websocket.receive_json() for _ in range(3)]
+
+        assert [result["frameId"] for result in results] == ["frame-1", "frame-2", "frame-3"]
+        assert [result["queue"]["droppedFrames"] for result in results] == [0, 0, 0]
+        assert all(result["queue"]["policy"] == "fifo_no_drop" for result in results)
+        assert results[2]["riskScores"]["phone_operation"] > results[0]["riskScores"]["phone_operation"]
+
+
 def test_driver4_v7_mobile_session_route_exists() -> None:
     client = TestClient(app)
 

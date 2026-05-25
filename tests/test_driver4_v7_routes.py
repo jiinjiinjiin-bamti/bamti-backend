@@ -218,6 +218,30 @@ def test_driver4_v7_pre_analysis_websocket_processes_all_frames_in_order(monkeyp
         assert results[2]["riskScores"]["phone_operation"] > results[0]["riskScores"]["phone_operation"]
 
 
+def test_driver4_v7_pre_analysis_upload_returns_full_timeline(monkeypatch) -> None:
+    monkeypatch.setattr("app.api.driver.v7.upload_analysis.get_runner", lambda _: FakeDriver4Runner())
+    monkeypatch.setattr(
+        "app.api.driver.v7.upload_analysis.extract_video_frames",
+        lambda *_args, **_kwargs: [(0.0, JPEG_BYTES), (0.125, JPEG_BYTES), (0.25, JPEG_BYTES)],
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/driver/v7/pre-analysis/upload",
+        data={"samplingFps": "8"},
+        files={"video": ("sample.mp4", b"not-a-real-video", "video/mp4")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["type"] == "pre_analysis_complete"
+    assert payload["samplingFps"] == 8
+    assert payload["frameCount"] == 3
+    assert [frame["frameTimeSeconds"] for frame in payload["frames"]] == [0.0, 0.125, 0.25]
+    assert [frame["frameId"] for frame in payload["frames"]] == ["upload-frame-0", "upload-frame-1", "upload-frame-2"]
+    assert payload["frames"][2]["riskScores"]["phone_operation"] > payload["frames"][0]["riskScores"]["phone_operation"]
+
+
 def test_driver4_v7_mobile_session_route_exists() -> None:
     client = TestClient(app)
 

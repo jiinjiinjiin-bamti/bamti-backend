@@ -6,6 +6,7 @@ sqlalchemy[asyncio]
 aiomysql
 pillow
 numpy
+opencv-python-headless
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.8.0+cpu
 torchvision==0.23.0

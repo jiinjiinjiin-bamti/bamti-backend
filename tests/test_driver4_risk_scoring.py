@@ -1,6 +1,17 @@
 from app.inference.risk_scoring import Driver4RiskScorer
 
 
+def test_driver4_risk_scorer_defaults_use_more_responsive_threshold_and_charge_rate() -> None:
+    scorer = Driver4RiskScorer()
+
+    scores = scorer.update({"phone_operation": 0.5, "distraction": 0.4}, now=10.0)
+
+    assert scores["phone_operation"] == 1.0
+    assert scores["distraction"] == 0.0
+    assert scorer.metadata()["activationThreshold"] == 0.4
+    assert scorer.metadata()["chargeRate"] == 60.0
+
+
 def test_driver4_risk_scorer_charges_risk_score_from_sustained_evidence() -> None:
     scorer = Driver4RiskScorer(
         activation_threshold=0.5,

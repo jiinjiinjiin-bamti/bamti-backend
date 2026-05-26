@@ -45,7 +45,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DRIVER4_V7_ACTIVATION_THRESHOLD", "BAMTI_DRIVER4_V7_ACTIVATION_THRESHOLD"),
     )
     driver4_v7_charge_rate: float = Field(
-        default=35.0,
+        default=50.0,
         validation_alias=AliasChoices("DRIVER4_V7_CHARGE_RATE", "BAMTI_DRIVER4_V7_CHARGE_RATE"),
     )
     driver4_v7_decay_rate: float = Field(

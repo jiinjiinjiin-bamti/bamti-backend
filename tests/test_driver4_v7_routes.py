@@ -105,7 +105,7 @@ def test_driver4_v7_websocket_returns_temporal_risk_scores(monkeypatch) -> None:
         assert result["riskWarning"] == {
             "isWarning": False,
             "warningClass": "phone_operation",
-            "warningScore": 2.1,
+            "warningScore": 3.0,
             "warningThreshold": 70.0,
         }
 
@@ -143,7 +143,7 @@ def test_driver4_v7_websocket_uses_frame_time_for_risk_scores(monkeypatch) -> No
             result = websocket.receive_json()
             assert result["type"] == "inference_result"
 
-        assert result["riskScores"]["phone_operation"] == 12.6
+        assert result["riskScores"]["phone_operation"] == 18.0
 
 
 def test_driver4_v7_websocket_resets_risk_scores_for_new_session_start(monkeypatch) -> None:

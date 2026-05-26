@@ -9,7 +9,7 @@ def _clamp_score(score: float) -> float:
 @dataclass
 class Driver4RiskScorer:
     activation_threshold: float = 0.5
-    charge_rate: float = 35.0
+    charge_rate: float = 50.0
     decay_rate: float = 20.0
     warning_threshold: float = 70.0
     base_interval_seconds: float = 0.1

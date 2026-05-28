@@ -7,7 +7,7 @@ import torch
 from app.core.config import settings
 from app.inference.class_mapping import ServiceDetectionClass
 from app.inference.model_loader import LoadedModel, load_model
-from app.inference.preprocessing import image_bytes_to_tensor
+from app.inference.preprocessing import image_bytes_to_tensor, raw_rgb_bytes_to_tensor
 from app.inference.runner import InferenceRunner
 from app.inference.schemas import DetectionClass, DetectionScore, InferenceResult, InferenceTelemetry, ModelManifest, ModelRuntimeInfo
 from app.inference.telemetry import processing_fps_counter
@@ -26,6 +26,9 @@ class BamtiTorchRunner(InferenceRunner):
 
     async def infer(self, frame: bytes) -> InferenceResult:
         return await asyncio.to_thread(self._infer_sync, frame)
+
+    async def infer_raw_rgb(self, frame: bytes, width: int, height: int) -> InferenceResult:
+        return await asyncio.to_thread(self._infer_sync, frame, "application/x-rgb24", width, height)
 
     def _load_model(self) -> LoadedModel:
         if self.model_path is not None:
@@ -50,11 +53,22 @@ class BamtiTorchRunner(InferenceRunner):
             ),
         )
 
-    def _infer_sync(self, frame: bytes) -> InferenceResult:
+    def _infer_sync(
+        self,
+        frame: bytes,
+        content_type: str = "image/jpeg",
+        width: int | None = None,
+        height: int | None = None,
+    ) -> InferenceResult:
         loaded_model = self._load_model()
 
         preprocess_started = time.perf_counter()
-        input_tensor = image_bytes_to_tensor(frame, loaded_model.device)
+        if content_type == "application/x-rgb24":
+            if width is None or height is None:
+                raise ValueError("Raw RGB inference requires frame width and height.")
+            input_tensor = raw_rgb_bytes_to_tensor(frame, width, height, loaded_model.device)
+        else:
+            input_tensor = image_bytes_to_tensor(frame, loaded_model.device)
         preprocess_ms = (time.perf_counter() - preprocess_started) * 1000
 
         inference_started = time.perf_counter()

@@ -22,13 +22,26 @@ def _runs_dir():
     return settings.telemetry_runs_dir
 
 
+def _api_version_slug(payload: TelemetryPayload) -> str | None:
+    environment = payload.get("environment")
+    if not isinstance(environment, dict):
+        return None
+
+    api_version = environment.get("apiVersion")
+    if api_version is None:
+        return None
+
+    return _safe_slug(str(api_version))
+
+
 @router.post("/runs", response_model=TelemetryRunSavedResponse)
 async def save_telemetry_run(payload: TelemetryPayload = Body(...)) -> TelemetryRunSavedResponse:
     now = datetime.now(kst)
     created_at = now.isoformat()
     label = _safe_slug(str(payload.get("label") or "performance-run"))
+    api_version = _api_version_slug(payload)
     timestamp = now.strftime("%Y-%m-%dT%H-%M-%SKST")
-    run_id = f"{timestamp}_{label}"
+    run_id = f"{timestamp}_{api_version}_{label}" if api_version else f"{timestamp}_{label}"
     file_path = _runs_dir() / f"{run_id}.json"
 
     document = {

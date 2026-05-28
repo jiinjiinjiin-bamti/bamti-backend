@@ -21,6 +21,10 @@ class Settings(BaseSettings):
         default=workspace_root / "model" / "final_model.pth",
         validation_alias=AliasChoices("AIHUB_MODEL_PATH", "BAMTI_AIHUB_MODEL_PATH"),
     )
+    base_model_path: Path = Field(
+        default=workspace_root / "model" / "aihub_notuned.pth",
+        validation_alias=AliasChoices("BASE_MODEL_PATH", "BAMTI_BASE_MODEL_PATH"),
+    )
     driver4_model_path: Path = Field(
         default=workspace_root / "model" / "final_model_0528.pth",
         validation_alias=AliasChoices("DRIVER4_MODEL_PATH", "BAMTI_DRIVER4_MODEL_PATH"),

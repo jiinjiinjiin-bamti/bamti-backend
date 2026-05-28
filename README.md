@@ -174,6 +174,10 @@ The Driver4 profile uses the `final_model_0528.pth` checkpoint and exposes one s
 | `phone_operation` | 핸드폰 조작 | 핸드폰 조작 |
 | `steering_operation` | 핸들 조작 | 핸들 조작 |
 
+### Base 4-class
+
+The Base profile uses the `aihub_notuned.pth` checkpoint and exposes the same four service detections as Driver4. The initial API surface is `/api/base/v7/detection-classes` and `/api/base/v7/inference/stream`.
+
 ## Preprocessing
 
 Frames are expected as JPEG images.
@@ -197,6 +201,7 @@ ENVIRONMENT=local
 INFERENCE_RUNNER=bamti-torch
 MODEL_PATH=/models/exp04_pseudo_ir_aug.pth
 AIHUB_MODEL_PATH=/models/final_model.pth
+BASE_MODEL_PATH=/models/aihub_notuned.pth
 DRIVER4_MODEL_PATH=/models/final_model_0528.pth
 MODEL_DEVICE=cpu
 MODEL_INPUT_SIZE=224

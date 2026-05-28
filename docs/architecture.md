@@ -169,5 +169,6 @@ Docker Compose mounts the workspace model directory into the API container:
 ../model -> /models
 MODEL_PATH=/models/exp04_pseudo_ir_aug.pth
 AIHUB_MODEL_PATH=/models/final_model.pth
+BASE_MODEL_PATH=/models/aihub_notuned.pth
 DRIVER4_MODEL_PATH=/models/final_model_0528.pth
 ```

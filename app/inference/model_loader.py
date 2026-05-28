@@ -11,6 +11,8 @@ from torchvision.models import vit_b_16
 from app.core.config import settings
 from app.inference.class_mapping import (
     ServiceDetectionClass,
+    base_raw_class_names,
+    base_service_detection_classes,
     driver4_raw_class_names,
     driver4_service_detection_classes,
     raw_action_class_names,
@@ -125,6 +127,17 @@ def _is_driver4_timm_vit_checkpoint(checkpoint: Any, state_dict: dict[str, Any])
     return checkpoint.get("class_names") == list(driver4_raw_class_names)
 
 
+def _is_base_timm_vit_checkpoint(checkpoint: Any, state_dict: dict[str, Any], model_path: Path) -> bool:
+    if not _is_timm_custom_vit_state_dict(state_dict) or not isinstance(checkpoint, dict):
+        return False
+    if checkpoint.get("class_names") is not None:
+        return False
+    if model_path != settings.base_model_path.expanduser().resolve():
+        return False
+    head_weight = state_dict.get("backbone.head.weight")
+    return hasattr(head_weight, "shape") and tuple(head_weight.shape) == (len(base_raw_class_names), 768)
+
+
 def _is_driver4_vit_state_dict(state_dict: dict[str, Any]) -> bool:
     return "classifier.weight" in state_dict and "backbone.heads.head.weight" not in state_dict
 
@@ -179,6 +192,28 @@ def _load_driver4_timm_vit_model(state_dict: dict[str, Any], compiled: bool, mod
         architecture="timm_vit_b_16_driver4",
         service_classes=driver4_service_detection_classes,
         raw_class_names=driver4_raw_class_names,
+    )
+
+
+def _load_base_timm_vit_model(state_dict: dict[str, Any], compiled: bool, model_path: Path) -> LoadedModel:
+    model = BamtiTimmVisionModel(num_classes=len(base_raw_class_names))
+    model.load_state_dict(state_dict, strict=True)
+
+    device = _resolve_device(settings.model_device)
+    model.to(device)
+    model.eval()
+    if compiled:
+        model = _compile_model(model)
+
+    return LoadedModel(
+        model=model,
+        class_names=[detection_class.variable_name for detection_class in base_service_detection_classes],
+        device=device,
+        model_path=model_path,
+        compiled=compiled,
+        architecture="timm_vit_b_16_base",
+        service_classes=base_service_detection_classes,
+        raw_class_names=base_raw_class_names,
     )
 
 
@@ -259,6 +294,9 @@ def _load_model_from_path_uncached(model_path: Path, compiled: bool = False) -> 
 
     if _is_driver4_timm_vit_checkpoint(checkpoint, state_dict):
         return _load_driver4_timm_vit_model(state_dict, compiled, model_path)
+
+    if _is_base_timm_vit_checkpoint(checkpoint, state_dict, model_path):
+        return _load_base_timm_vit_model(state_dict, compiled, model_path)
 
     if _is_timm_custom_vit_state_dict(state_dict):
         return _load_timm_custom_vit_model(state_dict, compiled, model_path)

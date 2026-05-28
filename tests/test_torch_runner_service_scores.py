@@ -88,6 +88,15 @@ def test_driver4_runner_uses_configured_model_path(monkeypatch) -> None:
     assert runner.model_path == Path("final_model_0528.pth")
 
 
+def test_base_runner_uses_configured_model_path(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "base_model_path", Path("aihub_notuned.pth"))
+
+    runner = get_runner("base-torch")
+
+    assert isinstance(runner, BamtiTorchRunner)
+    assert runner.model_path == Path("aihub_notuned.pth")
+
+
 def test_driver4_scores_map_checkpoint_classes_to_service_detections() -> None:
     loaded_model = LoadedModel(
         model=torch.nn.Identity(),

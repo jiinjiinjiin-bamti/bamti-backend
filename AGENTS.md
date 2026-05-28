@@ -8,6 +8,7 @@ The active backend is no longer a v1-only HTTP baseline. It supports real model 
 
 - BAMTI 7-class model profile
 - AIHub 3-class model profile
+- Base 4-class model profile
 - Driver4 4-class model profile
 - REST frame inference
 - WebSocket stream inference
@@ -39,6 +40,11 @@ Grouped classes use the maximum raw score, not an average.
 ### AIHub 3-class
 
 AIHub routes use the legacy 3-class model through `AIHUB_MODEL_PATH`.
+
+### Base 4-class
+
+Base routes use `aihub_notuned.pth` through `BASE_MODEL_PATH` and expose the same four service classes as Driver4: `body_touching`, `distraction`, `phone_operation`, and `steering_operation`.
+Base v7 returns EMA-based temporal `riskScores` for those four classes.
 
 ### Driver4 4-class
 

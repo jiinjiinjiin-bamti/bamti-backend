@@ -80,12 +80,12 @@ def test_debug_raw_detection_scores_use_raw_action_classes() -> None:
 
 
 def test_driver4_runner_uses_configured_model_path(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "driver4_model_path", Path("final_model_4cls.pth"))
+    monkeypatch.setattr(settings, "driver4_model_path", Path("final_model_0528.pth"))
 
     runner = get_runner("driver4-torch")
 
     assert isinstance(runner, BamtiTorchRunner)
-    assert runner.model_path == Path("final_model_4cls.pth")
+    assert runner.model_path == Path("final_model_0528.pth")
 
 
 def test_driver4_scores_map_checkpoint_classes_to_service_detections() -> None:
@@ -93,9 +93,9 @@ def test_driver4_scores_map_checkpoint_classes_to_service_detections() -> None:
         model=torch.nn.Identity(),
         class_names=[detection_class.variable_name for detection_class in driver4_service_detection_classes],
         device=torch.device("cpu"),
-        model_path=Path("final_model_4cls.pth"),
+        model_path=Path("final_model_0528.pth"),
         compiled=False,
-        architecture="torchvision_vit_b_16_driver4",
+        architecture="timm_vit_b_16_driver4",
         service_classes=driver4_service_detection_classes,
         raw_class_names=driver4_raw_class_names,
     )

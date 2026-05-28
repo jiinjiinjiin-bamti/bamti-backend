@@ -42,7 +42,7 @@ AIHub routes use the legacy 3-class model through `AIHUB_MODEL_PATH`.
 
 ### Driver4 4-class
 
-Driver4 routes use `final_model_4cls.pth` through `DRIVER4_MODEL_PATH` and expose the checkpoint-derived classes `body_touching`, `distraction`, `phone_operation`, and `steering_operation`.
+Driver4 routes use `final_model_0528.pth` through `DRIVER4_MODEL_PATH` and expose the checkpoint-derived classes `body_touching`, `distraction`, `phone_operation`, and `steering_operation`.
 Driver4 v7 returns EMA-based temporal `riskScores` for those four classes; keep the score accumulation in backend inference utilities and let frontend threshold experiments consume the returned risk scores.
 
 ## API Version Rules

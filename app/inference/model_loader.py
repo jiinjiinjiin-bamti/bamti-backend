@@ -119,6 +119,12 @@ def _is_timm_custom_vit_state_dict(state_dict: dict[str, Any]) -> bool:
     return any(key.startswith("backbone.patch_embed.") or key.startswith("backbone.blocks.") for key in state_dict)
 
 
+def _is_driver4_timm_vit_checkpoint(checkpoint: Any, state_dict: dict[str, Any]) -> bool:
+    if not _is_timm_custom_vit_state_dict(state_dict) or not isinstance(checkpoint, dict):
+        return False
+    return checkpoint.get("class_names") == list(driver4_raw_class_names)
+
+
 def _is_driver4_vit_state_dict(state_dict: dict[str, Any]) -> bool:
     return "classifier.weight" in state_dict and "backbone.heads.head.weight" not in state_dict
 
@@ -151,6 +157,28 @@ def _load_timm_custom_vit_model(state_dict: dict[str, Any], compiled: bool, mode
         architecture="timm_vit_b_16_custom",
         service_classes=service_detection_classes,
         raw_class_names=raw_action_class_names,
+    )
+
+
+def _load_driver4_timm_vit_model(state_dict: dict[str, Any], compiled: bool, model_path: Path) -> LoadedModel:
+    model = BamtiTimmVisionModel(num_classes=len(driver4_raw_class_names))
+    model.load_state_dict(state_dict, strict=True)
+
+    device = _resolve_device(settings.model_device)
+    model.to(device)
+    model.eval()
+    if compiled:
+        model = _compile_model(model)
+
+    return LoadedModel(
+        model=model,
+        class_names=[detection_class.variable_name for detection_class in driver4_service_detection_classes],
+        device=device,
+        model_path=model_path,
+        compiled=compiled,
+        architecture="timm_vit_b_16_driver4",
+        service_classes=driver4_service_detection_classes,
+        raw_class_names=driver4_raw_class_names,
     )
 
 
@@ -228,6 +256,9 @@ def _load_model_from_path_uncached(model_path: Path, compiled: bool = False) -> 
 
     checkpoint: Any = torch.load(model_path, map_location="cpu", weights_only=False)
     state_dict = _strip_common_prefixes(_extract_state_dict(checkpoint))
+
+    if _is_driver4_timm_vit_checkpoint(checkpoint, state_dict):
+        return _load_driver4_timm_vit_model(state_dict, compiled, model_path)
 
     if _is_timm_custom_vit_state_dict(state_dict):
         return _load_timm_custom_vit_model(state_dict, compiled, model_path)

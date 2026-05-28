@@ -6,7 +6,7 @@ from app.main import app
 
 def _driver4_manifest() -> ModelManifest:
     return ModelManifest(
-        model_version="final_model_4cls",
+        model_version="final_model_0528",
         classes=(
             DetectionClass(
                 variable_name="body_touching",

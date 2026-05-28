@@ -18,8 +18,8 @@ class FakeDriver4Runner:
                 DetectionScore(variable_name="steering_operation", class_id="steering_operation", display_name="핸들 조작", score=0.3),
             ],
             model=ModelRuntimeInfo(
-                name="final_model_4cls",
-                architecture="torchvision_vit_b_16_driver4",
+                name="final_model_0528",
+                architecture="timm_vit_b_16_driver4",
                 class_names=["body_touching", "distraction", "phone_operation", "steering_operation"],
                 device="cpu",
                 input_size=224,
@@ -41,7 +41,7 @@ def test_driver4_v7_detection_classes_route_uses_driver4_runner(monkeypatch) -> 
     def fake_get_model_manifest(name: str):
         requested_runner_names.append(name)
         return {
-            "modelVersion": "final_model_4cls",
+            "modelVersion": "final_model_0528",
             "classes": [
                 {
                     "variableName": "phone_operation",
@@ -59,7 +59,7 @@ def test_driver4_v7_detection_classes_route_uses_driver4_runner(monkeypatch) -> 
     response = client.get("/api/driver/v7/detection-classes")
 
     assert response.status_code == 200
-    assert response.json()["modelVersion"] == "final_model_4cls"
+    assert response.json()["modelVersion"] == "final_model_0528"
     assert requested_runner_names == ["driver4-torch"]
 
 

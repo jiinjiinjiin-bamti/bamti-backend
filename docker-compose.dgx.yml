@@ -18,6 +18,7 @@ services:
       MODEL_DEVICE: ${MODEL_DEVICE:-cuda}
       MODEL_PATH: ${MODEL_PATH:-/models/exp04_pseudo_ir_aug.pth}
       AIHUB_MODEL_PATH: ${AIHUB_MODEL_PATH:-/models/final_model.pth}
+      DRIVER4_MODEL_PATH: ${DRIVER4_MODEL_PATH:-/models/final_model_0528.pth}
       DGX_GPU_DEVICE: ${DGX_GPU_DEVICE:-0}
       NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-0}
       NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}

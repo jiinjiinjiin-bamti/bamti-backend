@@ -9,7 +9,7 @@ RAW_RGB_BYTES = bytes([128]) * (224 * 224 * 3)
 
 
 class FakeDriver4Runner:
-    def __init__(self, *, expected_frame: bytes = JPEG_BYTES, architecture: str = "torchvision_vit_b_16_driver4") -> None:
+    def __init__(self, *, expected_frame: bytes = JPEG_BYTES, architecture: str = "timm_vit_b_16_driver4") -> None:
         self.expected_frame = expected_frame
         self.architecture = architecture
 
@@ -32,7 +32,7 @@ class FakeDriver4Runner:
                 DetectionScore(variable_name="steering_operation", class_id="steering_operation", display_name="핸들 조작", score=0.3),
             ],
             model=ModelRuntimeInfo(
-                name="final_model_4cls.pth",
+                name="final_model_0528.pth",
                 architecture=self.architecture,
                 class_names=["body_touching", "distraction", "phone_operation", "steering_operation"],
                 device="cpu",
@@ -224,4 +224,3 @@ def test_driver4_v5_websocket_uses_driver4_compiled_runner(monkeypatch) -> None:
         assert result["model"]["architecture"] == "torchvision_vit_b_16_driver4+torch_compile"
 
     assert requested_runner_names == ["driver4-torch-compiled"]
-

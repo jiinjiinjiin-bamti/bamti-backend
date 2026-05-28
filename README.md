@@ -165,7 +165,7 @@ The AIHub profile uses the legacy model and the following service classes:
 
 ### Driver4 4-class
 
-The Driver4 profile uses the `final_model_4cls.pth` checkpoint and exposes one service detection for each model output:
+The Driver4 profile uses the `final_model_0528.pth` checkpoint and exposes one service detection for each model output:
 
 | Variable | Display | Checkpoint class |
 |---|---|---|
@@ -197,7 +197,7 @@ ENVIRONMENT=local
 INFERENCE_RUNNER=bamti-torch
 MODEL_PATH=/models/exp04_pseudo_ir_aug.pth
 AIHUB_MODEL_PATH=/models/final_model.pth
-DRIVER4_MODEL_PATH=/models/final_model_4cls.pth
+DRIVER4_MODEL_PATH=/models/final_model_0528.pth
 MODEL_DEVICE=cpu
 MODEL_INPUT_SIZE=224
 MODEL_SCORE_ACTIVATION=softmax

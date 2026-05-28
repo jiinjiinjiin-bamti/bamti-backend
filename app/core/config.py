@@ -22,7 +22,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("AIHUB_MODEL_PATH", "BAMTI_AIHUB_MODEL_PATH"),
     )
     driver4_model_path: Path = Field(
-        default=workspace_root / "model" / "final_model_4cls.pth",
+        default=workspace_root / "model" / "final_model_0528.pth",
         validation_alias=AliasChoices("DRIVER4_MODEL_PATH", "BAMTI_DRIVER4_MODEL_PATH"),
     )
     model_device: str = Field(default="cpu", validation_alias=AliasChoices("MODEL_DEVICE", "BAMTI_MODEL_DEVICE"))

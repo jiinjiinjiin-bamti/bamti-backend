@@ -4,7 +4,7 @@ import logging
 import time
 from dataclasses import dataclass
 from json import JSONDecodeError
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
@@ -43,6 +43,7 @@ async def run_latest_pending_inference_stream(
     runtime_metadata: dict | None = None,
     include_debug_raw_detections: bool = False,
     session_metadata_factory: Callable[[], dict[str, Any]] | None = None,
+    inference_factory: Callable[[Any, QueuedFrame], Awaitable[Any]] | None = None,
     result_payload_factory: Callable[[Any, QueuedFrame], dict[str, Any]] | None = None,
     frame_meta_model: type[Any] = FrameMetaMessage,
     include_model_in_results: bool = True,
@@ -106,7 +107,11 @@ async def run_latest_pending_inference_stream(
                 continue
 
             try:
-                result = await runner.infer(frame.frame_bytes)
+                result = await (
+                    inference_factory(runner, frame)
+                    if inference_factory is not None
+                    else runner.infer(frame.frame_bytes)
+                )
             except Exception:
                 logger.exception("Latest-pending inference failed for session %s frame %s", session_id, frame.meta.frame_id)
                 stop_event.set()

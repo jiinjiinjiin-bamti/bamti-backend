@@ -5,6 +5,7 @@ from app.main import app
 
 
 JPEG_BYTES = b"\xff\xd8\xff\xe0base-v7-jpeg\xff\xd9"
+RAW_RGB_BYTES = bytes([128]) * (224 * 224 * 3)
 
 
 class FakeBaseRunner:
@@ -33,6 +34,14 @@ class FakeBaseRunner:
                 server_total_ms=92.0,
             ),
         )
+
+
+class FakeBaseRawRunner(FakeBaseRunner):
+    async def infer_raw_rgb(self, frame: bytes, width: int, height: int) -> InferenceResult:
+        assert frame == RAW_RGB_BYTES
+        assert width == 224
+        assert height == 224
+        return await self.infer(JPEG_BYTES)
 
 
 def test_base_v7_detection_classes_route_uses_base_runner(monkeypatch) -> None:
@@ -100,3 +109,54 @@ def test_base_v7_websocket_returns_temporal_risk_scores(monkeypatch) -> None:
         assert result["detections"][2]["variableName"] == "phone_operation"
         assert result["riskScores"]["phone_operation"] > result["riskScores"]["distraction"]
         assert result["riskScores"]["steering_operation"] == 0.0
+
+
+def test_base_v7_rawrgb_websocket_returns_lightweight_temporal_risk_scores(monkeypatch) -> None:
+    requested_runner_names: list[str] = []
+
+    def fake_get_runner(name: str):
+        requested_runner_names.append(name)
+        return FakeBaseRawRunner()
+
+    monkeypatch.setattr("app.api.v3.websocket.get_runner", fake_get_runner)
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/base/v7-rawrgb/inference/stream") as websocket:
+        websocket.send_json(
+            {
+                "type": "session_start",
+                "sessionId": "base-session-1",
+                "targetTransmissionFps": 10,
+                "transport": "websocket",
+            },
+        )
+        started = websocket.receive_json()
+        assert started["type"] == "session_started"
+        assert started["modelProfile"] == "base"
+        assert started["apiVersion"] == "v7-rawrgb"
+        assert started["frameEncoding"] == "raw_rgb_224"
+        assert started["riskScoring"]["algorithm"] == "time_buffer_charge_decay_risk_accumulation"
+
+        websocket.send_json(
+            {
+                "type": "frame_meta",
+                "sessionId": "base-session-1",
+                "frameId": "frame-1",
+                "clientSentAt": "12345.67",
+                "contentType": "application/x-rgb24",
+                "width": 224,
+                "height": 224,
+                "encodingMs": 8.0,
+            },
+        )
+        websocket.send_bytes(RAW_RGB_BYTES)
+
+        result = websocket.receive_json()
+        assert result["type"] == "inference_result"
+        assert result["detections"][2]["variableName"] == "phone_operation"
+        assert result["riskScores"]["phone_operation"] > result["riskScores"]["distraction"]
+        assert result["queue"] == {"droppedFrames": 0}
+        assert "riskScoring" not in result
+        assert "riskWarning" not in result
+        assert "model" not in result
+        assert requested_runner_names == ["base-torch"]

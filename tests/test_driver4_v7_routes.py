@@ -112,6 +112,58 @@ def test_driver4_v7_websocket_returns_temporal_risk_scores(monkeypatch) -> None:
         }
 
 
+def test_driver4_v7_fast_websocket_returns_lightweight_temporal_risk_scores(monkeypatch) -> None:
+    requested_runner_names: list[str] = []
+
+    def fake_get_runner(name: str):
+        requested_runner_names.append(name)
+        return FakeDriver4Runner()
+
+    monkeypatch.setattr("app.api.v3.websocket.get_runner", fake_get_runner)
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/driver/v7-fast/inference/stream") as websocket:
+        websocket.send_json(
+            {
+                "type": "session_start",
+                "sessionId": "session-1",
+                "targetTransmissionFps": 10,
+                "transport": "websocket",
+            },
+        )
+        started = websocket.receive_json()
+        assert started["type"] == "session_started"
+        assert started["modelProfile"] == "driver4"
+        assert started["apiVersion"] == "v7-fast"
+        assert started["queuePolicy"] == "latest_pending_only"
+        assert started["riskScoring"]["algorithm"] == "time_buffer_charge_decay_risk_accumulation"
+
+        websocket.send_json(
+            {
+                "type": "frame_meta",
+                "sessionId": "session-1",
+                "frameId": "frame-1",
+                "clientSentAt": "12345.67",
+                "contentType": "image/jpeg",
+                "width": 224,
+                "height": 224,
+                "encodingMs": 8.0,
+            },
+        )
+        websocket.send_bytes(JPEG_BYTES)
+
+        result = websocket.receive_json()
+        assert result["type"] == "inference_result"
+        assert result["detections"][2]["variableName"] == "phone_operation"
+        assert result["riskScores"]["phone_operation"] > result["riskScores"]["distraction"]
+        assert result["riskScores"]["steering_operation"] == 0.0
+        assert result["queue"] == {"droppedFrames": 0}
+        assert "riskScoring" not in result
+        assert "riskWarning" not in result
+        assert "model" not in result
+        assert requested_runner_names == ["driver4-torch"]
+
+
 def test_driver4_v7_websocket_uses_frame_time_for_risk_scores(monkeypatch) -> None:
     monkeypatch.setattr("app.api.driver.v7.websocket.get_runner", lambda _: FakeDriver4Runner())
     client = TestClient(app)

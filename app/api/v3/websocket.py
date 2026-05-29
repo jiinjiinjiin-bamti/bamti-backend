@@ -4,6 +4,7 @@ import logging
 import time
 from dataclasses import dataclass
 from json import JSONDecodeError
+from typing import Any, Callable
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
@@ -41,6 +42,12 @@ async def run_latest_pending_inference_stream(
     runner_name: str | None = None,
     runtime_metadata: dict | None = None,
     include_debug_raw_detections: bool = False,
+    session_metadata_factory: Callable[[], dict[str, Any]] | None = None,
+    result_payload_factory: Callable[[Any, QueuedFrame], dict[str, Any]] | None = None,
+    frame_meta_model: type[Any] = FrameMetaMessage,
+    include_model_in_results: bool = True,
+    include_queue_policy_in_results: bool = True,
+    include_queue_pending_in_results: bool = True,
 ) -> None:
     await websocket.accept()
 
@@ -108,6 +115,14 @@ async def run_latest_pending_inference_stream(
                 return
             server_responded_at = _server_time_ms()
 
+            queue_payload = {
+                "droppedFrames": dropped_frames,
+            }
+            if include_queue_policy_in_results:
+                queue_payload["policy"] = "latest_pending_only"
+            if include_queue_pending_in_results:
+                queue_payload["pendingFrames"] = 1 if pending_frame is not None else 0
+
             response_payload = {
                 "type": "inference_result",
                 "sessionId": session_id,
@@ -116,14 +131,13 @@ async def run_latest_pending_inference_stream(
                 "serverReceivedAt": frame.server_received_at,
                 "serverRespondedAt": server_responded_at,
                 "detections": [detection.model_dump(by_alias=True) for detection in result.detections],
-                "model": result.model.model_dump(by_alias=True),
-                "queue": {
-                    "policy": "latest_pending_only",
-                    "droppedFrames": dropped_frames,
-                    "pendingFrames": 1 if pending_frame is not None else 0,
-                },
+                "queue": queue_payload,
                 "telemetry": result.telemetry.model_dump(by_alias=True),
             }
+            if include_model_in_results:
+                response_payload["model"] = result.model.model_dump(by_alias=True)
+            if result_payload_factory is not None:
+                response_payload.update(result_payload_factory(result, frame))
             if include_debug_raw_detections and result.debug_raw_detections:
                 response_payload["debugRawDetections"] = [
                     detection.model_dump(by_alias=True)
@@ -153,6 +167,7 @@ async def run_latest_pending_inference_stream(
                     continue
 
                 session_id = session_start.session_id
+                session_metadata = session_metadata_factory() if session_metadata_factory is not None else {}
                 await send_json(
                     {
                         "type": "session_started",
@@ -161,6 +176,7 @@ async def run_latest_pending_inference_stream(
                         "transport": "websocket",
                         "queuePolicy": "latest_pending_only",
                         **(runtime_metadata or {}),
+                        **session_metadata,
                     },
                 )
                 continue
@@ -194,7 +210,7 @@ async def run_latest_pending_inference_stream(
                 continue
 
             try:
-                frame_meta = FrameMetaMessage.model_validate(payload)
+                frame_meta = frame_meta_model.model_validate(payload)
             except ValidationError as exc:
                 await send_error("invalid_frame_meta", exc.errors()[0]["msg"])
                 continue

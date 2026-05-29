@@ -8,6 +8,7 @@ from app.api.driver.v4_1 import router as v4_1_router
 from app.api.driver.v5 import router as v5_router
 from app.api.driver.v6 import router as v6_router
 from app.api.driver.v7 import router as v7_router
+from app.api.driver.v7_fast import router as v7_fast_router
 
 
 router = APIRouter(prefix="/driver")
@@ -19,3 +20,4 @@ router.include_router(v4_1_router)
 router.include_router(v5_router)
 router.include_router(v6_router)
 router.include_router(v7_router)
+router.include_router(v7_fast_router)

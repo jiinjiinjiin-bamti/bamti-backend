@@ -160,3 +160,51 @@ def test_base_v7_rawrgb_websocket_returns_lightweight_temporal_risk_scores(monke
         assert "riskWarning" not in result
         assert "model" not in result
         assert requested_runner_names == ["base-torch"]
+
+
+def test_base_v7_fast_websocket_returns_lightweight_temporal_risk_scores(monkeypatch) -> None:
+    requested_runner_names: list[str] = []
+
+    def fake_get_runner(name: str):
+        requested_runner_names.append(name)
+        return FakeBaseRunner()
+
+    monkeypatch.setattr("app.api.v3.websocket.get_runner", fake_get_runner)
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/base/v7-fast/inference/stream") as websocket:
+        websocket.send_json(
+            {
+                "type": "session_start",
+                "sessionId": "base-session-1",
+                "targetTransmissionFps": 10,
+                "transport": "websocket",
+            },
+        )
+        started = websocket.receive_json()
+        assert started["type"] == "session_started"
+        assert started["modelProfile"] == "base"
+        assert started["apiVersion"] == "v7-fast"
+        assert started["riskScoring"]["algorithm"] == "time_buffer_charge_decay_risk_accumulation"
+
+        websocket.send_json(
+            {
+                "type": "frame_meta",
+                "sessionId": "base-session-1",
+                "frameId": "frame-1",
+                "clientSentAt": "12345.67",
+                "contentType": "image/jpeg",
+                "encodingMs": 8.0,
+            },
+        )
+        websocket.send_bytes(JPEG_BYTES)
+
+        result = websocket.receive_json()
+        assert result["type"] == "inference_result"
+        assert result["detections"][2]["variableName"] == "phone_operation"
+        assert result["riskScores"]["phone_operation"] > result["riskScores"]["distraction"]
+        assert result["queue"] == {"droppedFrames": 0}
+        assert "riskScoring" not in result
+        assert "riskWarning" not in result
+        assert "model" not in result
+        assert requested_runner_names == ["base-torch"]

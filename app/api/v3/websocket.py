@@ -101,7 +101,7 @@ async def run_latest_pending_inference_stream(
         if not diagnostics_enabled:
             return
 
-        logger.info(
+        logger.warning(
             "ws_diag reason=%s session=%s receive_text=%s frame_meta=%s frame_bytes=%s queued=%s "
             "dropped=%s infer_start=%s infer_done=%s send_start=%s send_done=%s send_error=%s "
             "pending=%s last_frame=%s last_infer_ms=%s last_send_ms=%s",

@@ -26,6 +26,7 @@ services:
       TORCH_COMPILE_MODE: ${TORCH_COMPILE_MODE:-reduce-overhead}
       TELEMETRY_RUNS_DIR: ${TELEMETRY_RUNS_DIR:-/app/telemetry_runs}
       MAX_FRAME_BYTES: ${MAX_FRAME_BYTES:-1048576}
+      WEBSOCKET_DIAGNOSTICS: ${WEBSOCKET_DIAGNOSTICS:-0}
       DATABASE_URL: ${DATABASE_URL:-mysql+aiomysql://dms_user:dms_password@mysql:3306/dms}
     ports:
       - "8000:8000"

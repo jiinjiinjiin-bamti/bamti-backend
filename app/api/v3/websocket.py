@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass
 from json import JSONDecodeError
@@ -37,6 +38,10 @@ def _parse_json_message(raw_message: str) -> dict:
     return payload
 
 
+def _websocket_diagnostics_enabled() -> bool:
+    return os.getenv("WEBSOCKET_DIAGNOSTICS", "").lower() in {"1", "true", "yes", "on"}
+
+
 async def run_latest_pending_inference_stream(
     websocket: WebSocket,
     runner_name: str | None = None,
@@ -55,6 +60,24 @@ async def run_latest_pending_inference_stream(
     session_id: str | None = None
     pending_frame: QueuedFrame | None = None
     dropped_frames = 0
+    diagnostics_enabled = _websocket_diagnostics_enabled()
+    diagnostics = {
+        "receive_text": 0,
+        "frame_meta": 0,
+        "frame_bytes": 0,
+        "queued": 0,
+        "dropped": 0,
+        "infer_start": 0,
+        "infer_done": 0,
+        "send_start": 0,
+        "send_done": 0,
+        "send_error": 0,
+    }
+    diagnostic_last_values: dict[str, float | str | None] = {
+        "frame_id": None,
+        "infer_ms": None,
+        "send_ms": None,
+    }
     frame_available = asyncio.Event()
     queue_lock = asyncio.Lock()
     send_lock = asyncio.Lock()
@@ -63,7 +86,47 @@ async def run_latest_pending_inference_stream(
 
     async def send_json(payload: dict) -> None:
         async with send_lock:
-            await websocket.send_json(payload)
+            diagnostics["send_start"] += 1
+            send_started_at = time.perf_counter()
+            try:
+                await websocket.send_json(payload)
+            except Exception:
+                diagnostics["send_error"] += 1
+                raise
+            finally:
+                diagnostic_last_values["send_ms"] = round((time.perf_counter() - send_started_at) * 1000, 3)
+            diagnostics["send_done"] += 1
+
+    def log_diagnostics(reason: str) -> None:
+        if not diagnostics_enabled:
+            return
+
+        logger.info(
+            "ws_diag reason=%s session=%s receive_text=%s frame_meta=%s frame_bytes=%s queued=%s "
+            "dropped=%s infer_start=%s infer_done=%s send_start=%s send_done=%s send_error=%s "
+            "pending=%s last_frame=%s last_infer_ms=%s last_send_ms=%s",
+            reason,
+            session_id,
+            diagnostics["receive_text"],
+            diagnostics["frame_meta"],
+            diagnostics["frame_bytes"],
+            diagnostics["queued"],
+            diagnostics["dropped"],
+            diagnostics["infer_start"],
+            diagnostics["infer_done"],
+            diagnostics["send_start"],
+            diagnostics["send_done"],
+            diagnostics["send_error"],
+            1 if pending_frame is not None else 0,
+            diagnostic_last_values["frame_id"],
+            diagnostic_last_values["infer_ms"],
+            diagnostic_last_values["send_ms"],
+        )
+
+    async def log_diagnostics_periodically() -> None:
+        while not stop_event.is_set():
+            await asyncio.sleep(5)
+            log_diagnostics("periodic")
 
     async def close_websocket(code: int = status.WS_1000_NORMAL_CLOSURE) -> None:
         nonlocal websocket_close_sent
@@ -106,6 +169,9 @@ async def run_latest_pending_inference_stream(
             if frame is None:
                 continue
 
+            diagnostics["infer_start"] += 1
+            diagnostic_last_values["frame_id"] = frame.meta.frame_id
+            inference_started_at = time.perf_counter()
             try:
                 result = await (
                     inference_factory(runner, frame)
@@ -118,6 +184,8 @@ async def run_latest_pending_inference_stream(
                 await send_error("inference_failed", "WebSocket inference failed. Check backend model/runtime logs.", frame.meta.frame_id)
                 await close_websocket(code=status.WS_1011_INTERNAL_ERROR)
                 return
+            diagnostics["infer_done"] += 1
+            diagnostic_last_values["infer_ms"] = round((time.perf_counter() - inference_started_at) * 1000, 3)
             server_responded_at = _server_time_ms()
 
             queue_payload = {
@@ -152,10 +220,12 @@ async def run_latest_pending_inference_stream(
             await send_json(response_payload)
 
     processor_task = asyncio.create_task(process_latest_frames())
+    diagnostics_task = asyncio.create_task(log_diagnostics_periodically()) if diagnostics_enabled else None
 
     try:
         while True:
             raw_message = await websocket.receive_text()
+            diagnostics["receive_text"] += 1
             try:
                 payload = _parse_json_message(raw_message)
             except (JSONDecodeError, ValueError) as exc:
@@ -219,6 +289,8 @@ async def run_latest_pending_inference_stream(
             except ValidationError as exc:
                 await send_error("invalid_frame_meta", exc.errors()[0]["msg"])
                 continue
+            diagnostics["frame_meta"] += 1
+            diagnostic_last_values["frame_id"] = frame_meta.frame_id
 
             if frame_meta.session_id != session_id:
                 await send_error("session_mismatch", "frame_meta sessionId does not match active session.", frame_meta.frame_id)
@@ -226,6 +298,7 @@ async def run_latest_pending_inference_stream(
 
             server_received_at = _server_time_ms()
             frame_bytes = await websocket.receive_bytes()
+            diagnostics["frame_bytes"] += 1
             if not frame_bytes:
                 await send_error("empty_frame", "Frame binary message must not be empty.", frame_meta.frame_id)
                 continue
@@ -242,11 +315,13 @@ async def run_latest_pending_inference_stream(
                 if pending_frame is not None:
                     dropped_frame_id = pending_frame.meta.frame_id
                     dropped_frames += 1
+                    diagnostics["dropped"] += 1
                 pending_frame = QueuedFrame(
                     meta=frame_meta,
                     frame_bytes=frame_bytes,
                     server_received_at=server_received_at,
                 )
+                diagnostics["queued"] += 1
                 frame_available.set()
 
             if dropped_frame_id is not None:
@@ -262,8 +337,15 @@ async def run_latest_pending_inference_stream(
     except WebSocketDisconnect:
         return
     finally:
+        log_diagnostics("closing")
         stop_event.set()
         frame_available.set()
+        if diagnostics_task is not None:
+            diagnostics_task.cancel()
+            try:
+                await diagnostics_task
+            except asyncio.CancelledError:
+                pass
         processor_task.cancel()
         try:
             await processor_task
